@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "melspecproc.h": "c",
+        "spectrogram_module.h": "c",
+        "ambiq_nnsp_debug.h": "c"
+    }
+}
