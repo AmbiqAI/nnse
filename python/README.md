@@ -24,7 +24,28 @@ pip install -r requirements.txt
 deactivate
 ```
 ## Quick start
-If you want to test the already trained model, please go to `step 3` directly.
+We provided the two already trained models. The user can directly try on it. \
+`Small size model:` `~100k` parameters
+```cmd
+  $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
+```
+`Medium size model:` ~`400k` paramters
+```cmd
+  $ python test_se.py --epoch_loaded=140 --nn_arch='nn_arch/def_se_nn_arch128.txt' --recording=1  --feat_type='pspec' 
+```
+  * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
+  * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
+  * The argument `--epoch_loaded=85` means it will load the model saved in epoch = 85.
+  * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
+  * Alternatively, you can run the already saved wave file via setting `--recording=0`
+
+  ```cmd
+    $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=0 --test_wavefile='test_wavs/speech.wav' --feat_type='mel' 
+  ```
+This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
+  * `--feat_type='mel'`: type of feature extraction.
+    - `mel`: mel spectrogram
+    - `pspec`: power spectrogram
 ## Training procedure
 1. Feature extraction and save your features as tfrecord (see [here](https://www.tensorflow.org/guide/data) and [here](https://www.tensorflow.org/guide/data_performance)). Type
 ```cmd
@@ -32,7 +53,7 @@ If you want to test the already trained model, please go to `step 3` directly.
 ```
 2. Train your model. Type
 ```cmd
-  $ python train_se.py --epoch_loaded='random' --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' 
+  $ python train_se.py --epoch_loaded='random' --nn_arch='nn_arch/def_se_nn_arch72_mel.txt'
 ```
   * The argument `--epoch_loaded` represents which epoch of the weight table to be loaded
     - `--epoch_loaded='random'`means you start to train NN from a   randomly initiialized set of weights
@@ -42,10 +63,12 @@ If you want to test the already trained model, please go to `step 3` directly.
     - `NN architecture`: our nn architecture only supports sequential model (see the example [here](nn_arch/def_s2i_nn_arch.txt)). 
       - The layer type supports `fc`, `lstm`, `conv1d`
       - Activation type supports `relu6`, `tanh`, `sigmoid`, `linear`
-
+  * `--feat_type='mel'`: type of feature extraction.
+    - `mel`: mel spectrogram
+    - `pspec`: power spectrogram
 3.  Test from recorded wave file. Type
 ```cmd
-  $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1
+  $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
 ```
   * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
   * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
@@ -53,7 +76,7 @@ If you want to test the already trained model, please go to `step 3` directly.
   * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
   * Alternatively, you can run the already saved wave file via setting `--recording=0`
 ```cmd
-  $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=0 --test_wavefile='test_wavs/speech.wav'
+  $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=0 --test_wavefile='test_wavs/speech.wav' --feat_type='mel' 
 ```
   * This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
 
