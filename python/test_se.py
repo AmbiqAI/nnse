@@ -6,6 +6,7 @@ import wave
 import numpy as np
 import soundfile as sf
 import sounddevice as sd
+import librosa
 from nnsp_pack.feature_module import display_stft_tfmask
 from nnsp_pack.pyaudio_animation import AudioShowClass
 from nnsp_pack.nn_infer import NNInferClass
@@ -114,9 +115,16 @@ def main(args):
     else:
         wavefile = test_wavefile
 
-    data, sample_rate = librosa.load(wavefile, sr=16000)
+    data, sample_rate = sf.read(wavefile)
+    if data.ndim > 1:
+        data=data[:,0]
+        if sample_rate > 16000:
+            data = librosa.resample(
+                    data,
+                    orig_sr=sample_rate,
+                    target_sr=16000)
 
-    sd.play(data, sample_rate)
+    sd.play(data, 16000)
 
     se_inst = SeClass(
             args.nn_arch,
@@ -138,26 +146,26 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch72_mel.txt',
+        default='nn_arch/def_se_nn_arch128.txt',
         help='nn architecture')
 
     argparser.add_argument(
         '-ft',
         '--feat_type',
-        default='mel',
+        default='pspec',
         help='feature type: \'mel\'or \'pspec\'')
 
     argparser.add_argument(
         '-r',
         '--recording',
-        default = 1,
+        default = 0,
         help    = '1: recording the speech and test it, \
                    0: No recording.')
 
     argparser.add_argument(
         '-v',
         '--test_wavefile',
-        default = 'test_wavs/speech.wav',
+        default = 'test_wavs/steak_hairdryer.wav',
         help    = 'The wavfile name to be tested')
 
     argparser.add_argument(
@@ -169,7 +177,7 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 85,
+        default= 140,
         help='starting epoch')
 
     main(argparser.parse_args())
