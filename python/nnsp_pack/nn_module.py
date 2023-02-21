@@ -6,6 +6,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
 from . import post_aware_quant
+import logging
 
 class NeuralNetClass(tf.keras.Model):
     """
@@ -33,7 +34,7 @@ class NeuralNetClass(tf.keras.Model):
         self.layer_types = layer_types.copy()
         self.activaitons = activations.copy()
         self.input_layer = tf.keras.layers.InputLayer(
-                input_shape   = ((None, neurons[0])),
+                input_shape   = ((6, neurons[0])),
                 batch_size    = batchsize)
 
         self.nn_layers = [None] * self.num_layers
@@ -68,7 +69,7 @@ class NeuralNetClass(tf.keras.Model):
                         strides     = (self.nDownSample, 1), # downsampling 2 in timesteps dim
                         activation  = activations[i],
                         kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer),
-                        input_shape = (None, neurons[i], 1)) # (time, dim_feat, ch)
+                        input_shape = (6, neurons[i], 1)) # (time, dim_feat, ch)
 
             elif layer_type == 'fc':
                 layer = layers.Dense(
@@ -125,11 +126,14 @@ class NeuralNetClass(tf.keras.Model):
         for i, layer in enumerate(self.nn_layers):
             drop_layer = self.dropout_layers[i]
             out = drop_layer(out, training = training)
+            logging.error(f"shape is {out.shape}")
             if self.layer_types[i] == 'conv1d':
+                logging.error("performing conv")
                 out = tf.expand_dims(out,3)
                 out = layer(out, training = training) # (batches, timesteps, 1, neurons[1])
                 out = out[:, :, 0, :]
             elif self.layer_types[i] == 'lstm':
+                logging.error("performing lsm")
                 out, h_state, c_state = layer(
                                 out,
                                 initial_state = (h_states[i], c_states[i]),

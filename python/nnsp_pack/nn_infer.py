@@ -170,6 +170,8 @@ class NNInferClass:
         """
         NN frame process using tensorflow
         """
+        import pdb
+        pdb.set_trace()
         feat, spec = self.feature_proc(data)
         feats_expand = np.expand_dims(self.feats, axis=0)
 
@@ -178,6 +180,7 @@ class NNInferClass:
             est, self.states = self.nn_infer(feats_expand, 1.0, self.states, training=False)
             est = est[0,0].numpy()
             self.post_nn_infer(est)
+        pdb.set_trace()
         if return_all:
             return feat, spec, est
         else:        

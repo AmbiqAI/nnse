@@ -11,6 +11,7 @@ from nnsp_pack.pyaudio_animation import AudioShowClass
 from nnsp_pack.nn_infer import NNInferClass
 from nnsp_pack.stft_module import stft_class
 from data_se import params_audio as PARAM_AUDIO
+import librosa
 
 SHOW_HISTOGRAM  = False
 NP_INFERENCE    = False
@@ -53,10 +54,11 @@ class SeClass(NNInferClass):
         """
         params_audio = self.params_audio
         file = wave.open(r"output.wav", "wb")
-        file.setnchannels(2)
+        file.setnchannels(1)
         file.setsampwidth(2)
         file.setframerate(16000)
-
+        if len(data.shape) > 2:
+            data = data[:,0]
         bks = int(len(data) / params_audio['hop'])
         feats   = []
         specs   = []
@@ -81,7 +83,7 @@ class SeClass(NNInferClass):
                     data_freq,
                     tfmask = est,
                     min_tfmask = 0)
-            out = np.array([data_frame, out]).T.flatten()
+            out = np.array([out]).T.flatten()
             out = np.floor(out * 2**15).astype(np.int16)
             file.writeframes(out.tobytes())
         print('\n', end='')
@@ -112,7 +114,7 @@ def main(args):
     else:
         wavefile = test_wavefile
 
-    data, sample_rate = sf.read(wavefile)
+    data, sample_rate = librosa.load(wavefile, sr=16000)
 
     sd.play(data, sample_rate)
 
