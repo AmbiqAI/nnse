@@ -78,6 +78,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
         self.names=[]
         if DEBUG:
             self.cnt = 0
+        self.max_samples = max_samples
 
     def run(self):
         #      threadLock.acquire()
