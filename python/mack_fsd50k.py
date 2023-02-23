@@ -5,7 +5,7 @@ from random import sample
 import fire
 import pdb
 
-debug = True 
+debug = False 
 
 
 def main():

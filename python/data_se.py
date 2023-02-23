@@ -15,6 +15,7 @@ import boto3
 import soundfile as sf
 import sounddevice as sd
 import librosa
+import pdb
 from nnsp_pack import tfrecord_converter_se_split
 from nnsp_pack.feature_module import FeatureClass, display_stft_all
 from nnsp_pack import add_noise
@@ -118,7 +119,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
                     audio, sample_rate = sf.read(wavpath)
                 except :# pylint: disable=bare-except
                     success = 0
-                    logging.debug("Reading the %s fails ", wavpath)
+                    logging.exception("Reading the %s fails ", wavpath)
                 else:
                     if audio.ndim > 1:
                         audio=audio[:,0]
@@ -264,7 +265,7 @@ def main(args):
                     for name in lst_ns:
                         name = re.sub(r'\\', '/', name)
                         file.write(f'{name}\n')
-        else:
+        elif ntype=='musan/music':
             ntype0 = re.sub(r'/', '_', ntype)
             noise_files_train = f'data/noise_list/train_noiselist_{ntype0}.csv'
             noise_files_test = f'data/noise_list/test_noiselist_{ntype0}.csv'
@@ -280,6 +281,8 @@ def main(args):
                 for name in lst_ns[:start]:
                     name = re.sub(r'\\', '/', name)
                     file.write(f'{name}\n')
+        else:
+            pass
 
     target_files = { 'train': args.train_dataset_path,
                      'test' : args.test_dataset_path}
