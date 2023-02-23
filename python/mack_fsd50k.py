@@ -5,21 +5,24 @@ from random import sample
 import fire
 import pdb
 
-debug = False
+debug = True 
+
 
 def main():
     pass
 
+
 def generate_fsd_splits(fsd_base):
     dev_labels = Path(fsd_base) / 'FSD50K.ground_truth' / 'dev.csv'
     eval_labels = Path(fsd_base) / 'FSD50K.ground_truth' / 'eval.csv'
-    wav_dir = Path(fsd_base) / 'FSD50K.dev_audio'  
+    wav_dir = Path(fsd_base) / 'FSD50K.dev_audio'
     dev_df = pd.read_csv(str(dev_labels))
     eval_df = pd.read_csv(str(dev_labels))
 
-    noises = ['Computer_keyboard', 'Clapping',\
-                        'Crumpling_and_crinkling','Computer_keyboard',\
-                        'Dishes_and_pots_and_pans','Mechanical_fan','Packing_tape_and_duct_tape']
+    noises = ['Computer_keyboard', 'Clapping',
+              'Crumpling_and_crinkling',
+              'Dishes_and_pots_and_pans',
+              'Mechanical_fan', 'Packing_tape_and_duct_tape']
     rejects = ['Speech', 'Human_voice']
 
     def noise_filter(x, noise):
@@ -37,30 +40,27 @@ def generate_fsd_splits(fsd_base):
 
         class_data = dev_df[label_allow_list]
 
-        #why randomly split if we are already filtering...
+        # why randomly split if we are already filtering...
         train_data = class_data[class_data['split'] == 'train']
         val_data = class_data[class_data['split'] == 'val']
-        logging.info(f"found {len(class_data.index)} items for {noise}, split of {len(train_data.index)} / {len(val_data.index)}")
+        logging.info(
+            f"found {len(class_data.index)} items for {noise}, split of {len(train_data.index)} / {len(val_data.index)}")
 
         train_samples += (train_data['fname'].map(str) + ".wav").tolist()
         test_samples += (val_data['fname'].map(str) + ".wav").tolist()
-        noise_samples = (class_data['fname'].map(str) + ",    " + class_data['labels']).tolist()
+        noise_samples = (class_data['fname'].map(
+            str) + ",    " + class_data['labels']).tolist()
         if debug:
             with open(f"{noise}_samples.csv", 'w') as file:
                 file.write("\n".join(noise_samples))
-                
 
     train_samples = [str(wav_dir / x) for x in train_samples]
     test_samples = [str(wav_dir / x) for x in test_samples]
     with open("train_noiselist_FSD50K.csv", 'w') as file:
-        file.write( "\n".join(train_samples))
+        file.write("\n".join(train_samples))
 
     with open("test_noiselist_FSD50K.csv", 'w') as file:
-        file.write( "\n".join(test_samples))
-
-                
-
-
+        file.write("\n".join(test_samples))
 
 
 if __name__ == '__main__':
