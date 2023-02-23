@@ -56,7 +56,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
     def __init__(self, id_process,
                  name, src_list, train_set, ntype,
                  noise_files, snr_dbs, success_dict,
-                 params_audio_def):
+                 params_audio_def, max_samples=None):
 
         multiprocessing.Process.__init__(self)
         self.success_dict = success_dict
@@ -94,9 +94,13 @@ class FeatMultiProcsClass(multiprocessing.Process):
         """
         convert np array to tfrecord
         """
+        max_samples = self.max_samples
+        if max_samples is None:
+            max_samples = len(fnames) >> 1
+             
         MAX_LEN_SP = 25 * 16000
         random.shuffle(fnames)
-        for i in range(len(fnames) >> 1):
+        for i in range(max_samples):
             success = 1
             stimes = []
             etimes = []
@@ -241,8 +245,9 @@ def main(args):
     snr_dbs = [-6, -3, 0, 3, 6, 9, 12, 15, 18, 21, 100]
 
     ntypes = [
-        'wham_noise',
-        'musan/music'
+        #'wham_noise',
+        #'musan/music',
+        'FSD50K',
         ]
 
     os.makedirs('data/noise_list', exist_ok=True)
@@ -294,7 +299,10 @@ def main(args):
                 sub_src += [filepaths[idx0:]]
             else:
                 sub_src += [filepaths[idx0:blk_size+idx0]]
-
+        if train_set == 'train':
+            max_samples = 500
+        else:
+            max_samples = 200
         for ntype in ntypes:
             manager = multiprocessing.Manager()
             success_dict = manager.dict({i: [] for i in range(args.num_procs)})
@@ -322,7 +330,8 @@ def main(args):
                         noise_files,
                         snr_dbs,
                         success_dict,
-                        params_audio_def = params_audio)
+                        params_audio_def = params_audio,
+                        max_samples=max_samples)
                             for i in range(args.num_procs)]
 
             start_time = time.time()

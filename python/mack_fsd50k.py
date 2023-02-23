@@ -5,6 +5,7 @@ from random import sample
 import fire
 import pdb
 
+debug = False
 
 def main():
     pass
@@ -44,14 +45,17 @@ def generate_fsd_splits(fsd_base):
         train_samples += (train_data['fname'].map(str) + ".wav").tolist()
         test_samples += (val_data['fname'].map(str) + ".wav").tolist()
         noise_samples = (class_data['fname'].map(str) + ",    " + class_data['labels']).tolist()
-
-        with open(f"{noise}_samples.csv", 'w') as file:
-            file.write("\n".join(noise_samples))
+        if debug:
+            with open(f"{noise}_samples.csv", 'w') as file:
+                file.write("\n".join(noise_samples))
                 
-    with open("fsd50k_noise_train.csv", 'w') as file:
+
+    train_samples = [str(wav_dir / x) for x in train_samples]
+    test_samples = [str(wav_dir / x) for x in test_samples]
+    with open("train_noiselist_FSD50K.csv", 'w') as file:
         file.write( "\n".join(train_samples))
 
-    with open("fsd50k_noise_test.csv", 'w') as file:
+    with open("test_noiselist_FSD50K.csv", 'w') as file:
         file.write( "\n".join(test_samples))
 
                 

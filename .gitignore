@@ -10,6 +10,7 @@
 *.lm
 *.pyc
 *.pk
+*.mypy_cache/
 python/models_trained_bk
 nnse/python/data/*tfrecords*.csv
 evb/src/weights
