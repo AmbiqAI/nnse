@@ -251,7 +251,7 @@ def main(args):
         'wham_noise',
         'musan/music',
         # 'others',
-        # 'FSD50K',
+        'FSD50K',
         ]
 
     # Prepare noise dataset, train and test sets
@@ -276,8 +276,8 @@ def main(args):
             start = int(len(lines) / 5)
             lst_ns['test'] = lines[:start]
             lst_ns['train'] = lines[start:]
-            lst_ns_must = add_noise.get_noise_files_new("others/must")
-            random.shuffle(lst_ns_must)
+            # lst_ns_must = add_noise.get_noise_files_new("others/must")
+            # random.shuffle(lst_ns_must)
             for set0 in ['train', 'test']:
                 noise_files_lst = f'data/noise_list/{set0}_noiselist_{ntype}.csv'
 
@@ -436,7 +436,7 @@ if __name__ == "__main__":
         '-s',
         '--datasize_noise',
         type    = int,
-        default = 30000,
+        default = -1,
         help='How many speech samples per noise')
 
     argparser.add_argument(
