@@ -34,11 +34,11 @@ We provided the 3 already trained models. The user can directly try on it. \
 ```cmd
   $ python test_se.py --epoch_loaded=57 --nn_arch='nn_arch/def_se_nn_arch128_pspec.txt' --recording=1  --feat_type='pspec' 
 ```
-`Large size model:` ~`1M` paramters
+`Large size model:` ~`1.116M` paramters
 ```cmd
   $ python test_se.py --epoch_loaded=70 --nn_arch='nn_arch/def_se_nn_arch256_pspec.txt' --recording=1  --feat_type='pspec' 
 ```
-Argruments:
+`Input argruments`:
   * `--nn_arch`: it will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
   * `--epoch_loaded`: it will load the model saved in epoch = 62.
   * `--recording`:
@@ -47,6 +47,10 @@ Argruments:
   * `--feat_type`: type of feature extraction.
     - `mel`: mel spectrogram
     - `pspec`: power spectrogram
+
+`Outputs:`
+  * The enhanced speech is located at `test_result/enhanced_speech.wav`. 
+
 ## Training procedure
 1. Feature extraction and save your features as tfrecord (see [here](https://www.tensorflow.org/guide/data) and [here](https://www.tensorflow.org/guide/data_performance)). Type
     ```cmd
@@ -74,15 +78,21 @@ Argruments:
     ```cmd
       $ python test_se.py --epoch_loaded=62 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
     ```
-    * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
-    * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
-    * The argument `--epoch_loaded=62` means it will load the model saved in epoch = 62.
-    * `--recording`:
-      * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
-      * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
-    * `--feat_type='mel'`: type of feature extraction.
-      - `mel`: mel spectrogram
-      - `pspec`: power spectrogram
+    `Input Arguments:`
+
+      * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
+      * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
+      * The argument `--epoch_loaded=62` means it will load the model saved in epoch = 62.
+      * `--recording`:
+        * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
+        * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
+      * `--feat_type='mel'`: type of feature extraction.
+        - `mel`: mel spectrogram
+        - `pspec`: power spectrogram
+
+    `Outputs:`
+    * The enhanced speech is located at `test_results/enhanced_speech.wav`. 
+
 # Convert TF-model to C table
 To run the model on the embedded system, Apollo4 in our cae, we need a tool to support
 1. A neural network architecture, equivalent to Tensorflow, to perform on the desired microcontroller,

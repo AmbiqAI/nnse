@@ -106,6 +106,8 @@ class SeClass(NNInferClass):
 
         data, samplerate = sf.read(f"{result_folder}/output_{fname}")
         sf.write(f"{result_folder}/enhanced_{fname}", data[:,1], samplerate)
+        print(f'Check your enhanced speeech in {result_folder}/enhanced_{fname}')
+
 def main(args):
     """main function"""
     epoch_loaded    = int(args.epoch_loaded)
