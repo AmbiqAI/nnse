@@ -2,6 +2,8 @@
 Test trained NN model using wavefile as input
 """
 import argparse
+import os
+import re
 import wave
 import numpy as np
 import soundfile as sf
@@ -48,12 +50,14 @@ class SeClass(NNInferClass):
         print("Reset all the states from parents")
         super().reset()
 
-    def blk_proc(self, data):
+    def blk_proc(self, data, wavefile="speech.wav"):
         """
         NN process for several frames
         """
+        result_folder = 'test_results'
+        _, fname = os.path.split(wavefile)
         params_audio = self.params_audio
-        file = wave.open(r"output.wav", "wb")
+        file = wave.open(f"{result_folder}/output_{fname}", "wb")
         file.setnchannels(2)
         file.setsampwidth(2)
         file.setframerate(16000)
@@ -89,14 +93,19 @@ class SeClass(NNInferClass):
         tfmasks = np.array(tfmasks)
         feats   = np.array(feats)
         specs   = np.array(specs)
+
+        fig_name = re.sub(r'\.wav', '.pdf', fname)
         display_stft_tfmask(
             data,
             specs.T,
             feats.T,
             tfmasks.T,
-            sample_rate=16000)
+            sample_rate=16000,
+            print_name=f"{result_folder}/output_{fig_name}")
         file.close()
 
+        data, samplerate = sf.read(f"{result_folder}/output_{fname}")
+        sf.write(f"{result_folder}/enhanced_{fname}", data[:,1], samplerate)
 def main(args):
     """main function"""
     epoch_loaded    = int(args.epoch_loaded)
@@ -121,7 +130,6 @@ def main(args):
                     data,
                     orig_sr=sample_rate,
                     target_sr=16000)
-
     sd.play(data, 16000)
 
     se_inst = SeClass(
@@ -134,7 +142,7 @@ def main(args):
             feat_type       = args.feat_type
             )
 
-    se_inst.blk_proc(data)
+    se_inst.blk_proc(data, wavefile=wavefile)
 
 if __name__ == "__main__":
 
@@ -144,13 +152,13 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch128.txt',
+        default='nn_arch/def_se_nn_arch72_mel.txt',
         help='nn architecture')
 
     argparser.add_argument(
         '-ft',
         '--feat_type',
-        default='pspec',
+        default='mel',
         help='feature type: \'mel\'or \'pspec\'')
 
     argparser.add_argument(
@@ -163,7 +171,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-v',
         '--test_wavefile',
-        default = 'test_wavs/steak_hairdryer.wav',
+        default = 'test_wavs/speech.wav',
         help    = 'The wavfile name to be tested')
 
     argparser.add_argument(
@@ -175,7 +183,7 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 140,
+        default= 62, # 70
         help='starting epoch')
 
     main(argparser.parse_args())

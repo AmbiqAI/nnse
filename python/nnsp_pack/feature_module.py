@@ -107,12 +107,13 @@ def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
     plt.show()
 
 def display_stft_tfmask(
-        pcm_, 
-        spec_, 
-        melspec_db_, 
-        tfmask, 
+        pcm_,
+        spec_,
+        melspec_db_,
+        tfmask,
         sample_rate,
-        label_frame=None):
+        label_frame=None,
+        print_name=None):
     """
     Display stft, tfmask
     """
@@ -168,7 +169,7 @@ def display_stft_tfmask(
     len_feat, len0 = tfmask.shape
     ax_fr = np.arange(0,len0)
 
-    im = ax_handle.imshow( 
+    im = ax_handle.imshow(
             tfmask,
             origin  = 'lower',
             cmap    = 'pink_r',
@@ -191,6 +192,10 @@ def display_stft_tfmask(
     ax_handle.set_ylim([-1,1])
     my_colorbar(ax_handle)
     ax_handle.text(0.2, 0.2, 'sig')
+    if print_name:
+        fig = plt.gcf()
+        fig.set_size_inches((8.5, 11), forward=False)
+        plt.savefig(print_name, format='pdf', dpi=500)
     plt.show()
 
 def display_stft(pcm_, spec_, melspec_db_, sample_rate, label_frame=None):

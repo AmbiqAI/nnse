@@ -89,8 +89,13 @@ def get_noise(fnames, length = 16000 * 5, target_sampling_rate=16000):
             start = np.random.randint(0, len(noise)-length)
             noise = noise[start : start+length]
         else:
-            repeats = int(np.ceil(length / len(noise)))
-            noise = np.tile(noise, repeats)
-            noise = noise[:length]
+            try:
+                repeats = int(np.ceil(length / len(noise)))
+            except: # pylint: disable=bare-except
+                print(fnames[rand_idx])
+                noise = np.random.randn(length)
+            else:
+                noise = np.tile(noise, repeats)
+                noise = noise[:length]
 
     return noise

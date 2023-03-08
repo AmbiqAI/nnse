@@ -1,4 +1,4 @@
-#include "tflite.h"
+// #include "tflite.h"
 #include <stdint.h>
 #include "seCntrlClass.h"
 #include "am_util_stdio.h"
@@ -195,8 +195,8 @@ int main(void) {
     ns_lp_printf("\nPress button to start!\n");
 #endif
 
-    tflite_init();
-    test_tflite();
+    // tflite_init();
+    // test_tflite();
     seCntrlClass_reset(&cntrl_inst);
     while (1) 
     {
@@ -214,7 +214,6 @@ int main(void) {
                 break;
             }
             ns_rpc_data_clientDoneWithBlockFromPC(&IsRecordBlock);
-            ns_printf("%d\n", IsRecordBlock.buffer.data[0]);
             am_hal_delay_us(20000); 
         }
 #endif

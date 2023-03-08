@@ -1,4 +1,0 @@
-ExitOnError 1
-Reset
-LoadFile build/main.bin, 0x18000
-Exit

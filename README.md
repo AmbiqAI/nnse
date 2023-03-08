@@ -31,7 +31,7 @@ You need to download several datasets. Please read the license carefully. The de
 From the `nnse/evb/` directory:
 
 1. `make clean`
-2. `make NNSP_MODE=se GUI_ENABLE=1`
+2. `make`
 3. `make deploy` Prepare two USB cables. Ensure your board is connected via both the `JLINK USB port` and the `audio USB port`. Then turn on the power on EVB.
 4. Plug a mic into the 3.5mm port, and push BTN0 to initiate voice recording
 5. `make view` will provide SWO output as the device is running, showing 
@@ -44,14 +44,12 @@ From the `nnse/evb/` directory:
    You might need to change the option `--tty` depending on your OS.
 7. On your GUI, prress `record` to start recording and `stop` to stop recording. 
 8. Check the two recording files under `nnse/evb/audio_result/`. 
-   - One is `audio_raw.wav`, the raw PCM data from your mic.
-   - The other is `audio_se.wav`, the enhanced speech.
-`Note`: Due to the authority of the third-part licenses related to the training datasets (see [here](docs/README.md)), we couldn't provide a well-trained model here. The weight tables of NN we deployed on evb here is just in a random number. And the result is basically incorrect. Once you have the permission to access the data. please download it and train the model (see [here](./python/README.md)). 
-
+   - `audio_raw.wav`: the raw PCM data from your mic.
+   - `audio_se.wav`: the enhanced speech.
 
 ## Re-Training a New Model
 
-Our approach to training the model can be found in [README.md](./python/README.md). The trained model is saved in [evb/src/def_nn0_s2i.c](evb/src/def_nn0_s2i.c) and [evb/src/def_nn0_s2i.h](evb/src/def_nn0_s2i.h). 
+Our approach to training the model can be found in [README.md](./python/README.md). The trained model is saved in [evb/src/def_nn3_se.c](evb/src/def_nn3_se.c) and [evb/src/def_nn3_se.h](evb/src/def_nn3_se.h). 
 
 ## Library NS-NNSP Library Overview
 Library neuralspot NNSP, `ns-nnsp.a`, is a C library to build a pipeline including feature extraction and neural network to run on Apollo4. The source code is under the folder `ns-nnsp/`. You can modify or rebuild it via [NeuralSPOT Ambiq's AI Enablement Library](https://github.com/AmbiqAI/neuralSPOT).

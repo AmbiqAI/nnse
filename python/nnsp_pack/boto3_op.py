@@ -27,10 +27,6 @@ def s3_download(s3_bucket, audio_lists):
 
         for fname in fnames:
             fname_src = re.sub(r'(\./wavs/|wavs/)', '', fname)
-            if re.search(r'data_thchs30/', fname_src):
-                fname_src = 'garb/cn/' + fname_src
-            elif re.search(r'LibriSpeech/train-clean-360/', fname_src):
-                fname_src = 'garb/en/' + fname_src
             os.makedirs(os.path.dirname(fname), exist_ok=True)
             if os.path.exists(fname):
                 pass
@@ -41,4 +37,3 @@ def s3_download(s3_bucket, audio_lists):
                     print(f'downloading {fname} failed')
                 else:
                     print(f'downloading {fname} succeeded')
-                    # pass

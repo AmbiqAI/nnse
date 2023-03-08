@@ -113,29 +113,30 @@ def draw_nn_hist(nn_table):
 
     plt.show()
 
-def draw_nn_weight(nn_table, nn_infer, pruning=False):
+def draw_nn_weight(nn_table, nn_infer, pruning=False, hard_thresh = None):
     """
     Display NN weight table histogram
     """
     plt.title('kernels and biases histogram. Close the figure to continue')
     fig = plt.figure(2)
     for i, layer in enumerate(nn_table):
+        ax_h = plt.subplot(3, len(nn_table), i+1)
+        data = layer['kernel']
+        data = np.abs(data)
         if pruning:
             try:
-                _, mask = nn_infer.nn_layers[i].get_prune_reg_mask()
+                reg, mask = nn_infer.nn_layers[i].get_prune_reg_mask()
             except:  # pylint: disable=W0702
                 mask = 1.0
             else:
-                mask = (mask.numpy() > 0.5).astype(np.float32)
-                mask = mask.reshape((1,-1))
+                if hard_thresh:
+                    mask = (reg.numpy() > hard_thresh).astype(np.float32)
+                else:
+                    mask = np.array([1,])
                 print(f"Sparsity {mask.sum().astype(np.int32)}/{mask.size}")
 
                 if nn_infer.layer_types[i]=='lstm':
                     mask = np.tile(mask,4)
-
-        ax_h = plt.subplot(2, len(nn_table), i+1)
-        data = layer['kernel']
-        data = np.abs(data)
         img = ax_h.imshow(
             data,
             vmin=data.min(),
@@ -147,18 +148,25 @@ def draw_nn_weight(nn_table, nn_infer, pruning=False):
         fig.colorbar(img, cax=cax, orientation='vertical')
 
         if pruning:
-            ax_h = plt.subplot(2, len(nn_table), i+1+len(nn_table))
-            prune_data = layer['kernel'] * mask
-            prune_data = np.abs(prune_data)
-            img = ax_h.imshow(
-                prune_data,
-                vmin=prune_data.min(),
-                vmax=prune_data.max(),
-                cmap='pink',
-                aspect='auto')
-            divider = make_axes_locatable(ax_h)
-            cax = divider.append_axes('right', size='5%', pad=0.05)
-            fig.colorbar(img, cax=cax, orientation='vertical')
+            ax_h = plt.subplot(3, len(nn_table), i+1+len(nn_table))
+            if 0:
+                prune_data = layer['kernel'] * mask
+                prune_data = np.abs(prune_data)
+                img = ax_h.imshow(
+                    prune_data,
+                    vmin=prune_data.min(),
+                    vmax=prune_data.max(),
+                    cmap='pink',
+                    aspect='auto')
+                divider = make_axes_locatable(ax_h)
+                cax = divider.append_axes('right', size='5%', pad=0.05)
+                fig.colorbar(img, cax=cax, orientation='vertical')
+            else:
+                plt.plot(np.sort(reg)[::-1])
+
+        ax_h = plt.subplot(3, len(nn_table), i+1+len(nn_table) * 2)
+        data = data.flatten()
+        plt.plot(np.sort(data))
 
     plt.show()
 
@@ -443,7 +451,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_kws_nn_arch.txt',
+        default='nn_arch/def_se_nn_arch72_mel.txt',
         help='nn architecture')
 
     argparser.add_argument(
@@ -453,7 +461,7 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '--net_id',
-        default= 2,
+        default= 3,
         help='starting epoch')
 
     argparser.add_argument(

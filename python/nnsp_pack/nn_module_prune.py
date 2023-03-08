@@ -118,7 +118,8 @@ class NeuralNetClass(tf.keras.Model):
         mask,
         states,
         training = False,
-        quantized = False):
+        quantized = False,
+        hard_thresh = None):
 
         """Calling function"""
         self.bitwidths['kernel'] = 8
@@ -127,6 +128,7 @@ class NeuralNetClass(tf.keras.Model):
         # add the last dim to include channel (batches, timesteps, dim_feat, numCh = 1)
         out = self.input_layer(data_in)
         reg_lst = []
+
         for i, layer in enumerate(self.nn_layers):
             drop_layer = self.dropout_layers[i]
             out = drop_layer(out, training = training)
@@ -135,20 +137,28 @@ class NeuralNetClass(tf.keras.Model):
                 # out: (batches, timesteps, 1, neurons[1])
                 out, reg_layer, prune_mask = layer(out, training = training)
                 out = out[:, :, 0, :]
-                # if not training:
-                #     prune_mask = tf.cast(prune_mask >= 0.5, tf.float32)
-                reg_lst += [tf.reduce_sum(reg_layer)]
-                # out = out * prune_mask
+                if hard_thresh:
+                    if not training:
+                        prune_mask = tf.cast(reg_layer >= hard_thresh, tf.float32)
+                else:
+                    prune_mask = 1
+                reg_lst += [tf.reduce_sum(reg_layer * prune_mask)]
+                out = out * prune_mask
 
             elif self.layer_types[i] == 'lstm':
-                out, h_state, c_state, reg, prune_mask = layer(
+                out, h_state, c_state, reg_layer, prune_mask = layer(
                                 out,
                                 initial_state = (h_states[i], c_states[i]),
                                 training = training)
-                reg_lst += [tf.reduce_sum(reg_layer)]
-                # out = out * prune_mask
-                # h_state = h_state * prune_mask
-                # c_state = c_state * prune_mask
+                if hard_thresh:
+                    if not training:
+                        prune_mask = tf.cast(reg_layer >= hard_thresh, tf.float32)
+                else:
+                    prune_mask = 1
+                reg_lst += [tf.reduce_sum(reg_layer * prune_mask)]
+                out = out * prune_mask
+                h_state = h_state * prune_mask
+                c_state = c_state * prune_mask
 
                 self.h_states[i] = h_state
                 self.c_states[i] = c_state
@@ -157,10 +167,13 @@ class NeuralNetClass(tf.keras.Model):
                     out = layer(out, training=training)
                 else:
                     out, reg_layer, prune_mask = layer(out, training=training)
-                    # if not training:
-                    #     prune_mask = tf.cast(prune_mask >= 0.5, tf.float32)
-                    reg_lst += [tf.reduce_sum(reg_layer)]
-                    # out = out * prune_mask
+                    if hard_thresh:
+                        if not training:
+                            prune_mask = tf.cast(reg_layer >= hard_thresh, tf.float32)
+                    else:
+                        prune_mask = 1
+                    reg_lst += [tf.reduce_sum(reg_layer * prune_mask)]
+                    out = out * prune_mask
 
         states = (self.h_states, self.c_states)
         out *= mask
@@ -179,7 +192,6 @@ class NeuralNetClass(tf.keras.Model):
         inputs_pad = tf.concat([zero_pad, inputs], 1)
         masks = 1
         self.call(inputs_pad, masks, states, quantized=quantized)
-
     def quantized_weight(self):
         """
         Quantize the weight
@@ -432,7 +444,7 @@ class DensePruneLayer(tf.keras.layers.Dense):
         )
         reg = self.get_prune_reg()
         sort_reg = tf.sort(reg, direction='ASCENDING')
-        self.prune_threshold.assign(sort_reg[sort_reg.shape[0] >> 1])
+        # self.prune_threshold.assign(sort_reg[sort_reg.shape[0] >> 2])
 
     def call(self, inputs):
         """
@@ -449,6 +461,7 @@ class DensePruneLayer(tf.keras.layers.Dense):
         get_prune_reg
         """
         l2_norm_square = tf.reduce_sum((self.kernel)**2, axis=0)
+        l2_norm_square += self.bias**2
         norm_gl2 = tf.math.sqrt(l2_norm_square + 2**-15)
         return norm_gl2
 
@@ -489,7 +502,7 @@ class Conv2DPruneLayer(tf.keras.layers.Conv2D):
         )
         reg = self.get_prune_reg()
         sort_reg  = tf.sort(reg,direction='ASCENDING')
-        self.prune_threshold.assign(sort_reg[sort_reg.shape[0] >> 1])
+        # self.prune_threshold.assign(sort_reg[sort_reg.shape[0] >> 2])
 
     def call(self, inputs):
         """
@@ -506,6 +519,7 @@ class Conv2DPruneLayer(tf.keras.layers.Conv2D):
         get_prune_reg
         """
         l2_norm_square = tf.reduce_sum((self.kernel)**2, axis=[0,1,2])
+        l2_norm_square += self.bias**2
         norm_gl2 = tf.math.sqrt(l2_norm_square +2**-15)
         return norm_gl2
 
@@ -546,7 +560,7 @@ class LSTMPruneLayer(tf.keras.layers.LSTM):
         )
         reg= self.get_prune_reg()
         sort_reg  = tf.sort(reg,direction='ASCENDING')
-        self.prune_threshold.assign(sort_reg[sort_reg.shape[0] >> 1])
+        # self.prune_threshold.assign(sort_reg[sort_reg.shape[0] >> 2])
 
     def call(
             self,
@@ -568,22 +582,18 @@ class LSTMPruneLayer(tf.keras.layers.LSTM):
         get_prune_reg
         """
         # group reg for weight
-        l2_norm_square_weight = tf.reduce_sum(
-                    (self.trainable_variables[0])**2
-                  + (self.trainable_variables[1])**2, axis=[0])
-
-        l2_norm_square_weight = tf.reshape(l2_norm_square_weight, (4,-1))
-
-        l2_norm_square_weight = tf.reduce_sum(l2_norm_square_weight, axis=0)
-
+        weights = [ self.trainable_variables[0]**2,
+                    self.trainable_variables[1]**2]
+        l2_norm_square_weight = tf.concat(weights, 0)
+        l2_norm_square_weight = tf.split(l2_norm_square_weight, 4, -1)
+        l2_norm_square_weight = tf.concat(l2_norm_square_weight, 0)
         # group reg for bias
         l2_norm_square_bias = self.trainable_variables[2]**2
-
         l2_norm_square_bias = tf.reshape(l2_norm_square_bias, (4,-1))
-
-        l2_norm_square_bias = tf.reduce_sum(l2_norm_square_bias, axis=0)
         # total group reg
-        l2_norm_square = l2_norm_square_weight
+        weight_bias = [l2_norm_square_weight, l2_norm_square_bias]
+        l2_norm_square_weight = tf.concat(weight_bias, 0)
+        l2_norm_square = tf.reduce_sum(l2_norm_square_weight, axis=0)
 
         norm_gl2 = tf.math.sqrt(l2_norm_square + 2**-15)
         return norm_gl2

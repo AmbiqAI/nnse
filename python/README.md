@@ -23,34 +23,39 @@ pip install -r requirements.txt
 # then when finished with this virtualenv type:
 deactivate
 ```
+## Dataset
+You need to download the required dataset. Please read the licenses carefully. Please see [here](../docs/README.md).
 ## Quick start
-We provided the two already trained models. The user can directly try on it. \
+We provided the 3 already trained models. The user can directly try on it. \
 `Small size model:` `~100k` parameters
 ```cmd
-  $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
+  $ python test_se.py --epoch_loaded=62 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
 ```
 `Medium size model:` ~`400k` paramters
 ```cmd
-  $ python test_se.py --epoch_loaded=140 --nn_arch='nn_arch/def_se_nn_arch128.txt' --recording=1  --feat_type='pspec' 
+  $ python test_se.py --epoch_loaded=57 --nn_arch='nn_arch/def_se_nn_arch128_pspec.txt' --recording=1  --feat_type='pspec' 
 ```
-  * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
-  * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
-  * The argument `--epoch_loaded=85` means it will load the model saved in epoch = 85.
-  * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
-  * Alternatively, you can run the already saved wave file via setting `--recording=0`
-
-  ```cmd
-    $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=0 --test_wavefile='test_wavs/speech.wav' --feat_type='mel' 
-  ```
-This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
-  * `--feat_type='mel'`: type of feature extraction.
+`Large size model:` ~`1M` paramters
+```cmd
+  $ python test_se.py --epoch_loaded=70 --nn_arch='nn_arch/def_se_nn_arch256_pspec.txt' --recording=1  --feat_type='pspec' 
+```
+Argruments:
+  * `--nn_arch`: it will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
+  * `--epoch_loaded`: it will load the model saved in epoch = 62.
+  * `--recording`:
+    * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
+    * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
+  * `--feat_type`: type of feature extraction.
     - `mel`: mel spectrogram
     - `pspec`: power spectrogram
 ## Training procedure
 1. Feature extraction and save your features as tfrecord (see [here](https://www.tensorflow.org/guide/data) and [here](https://www.tensorflow.org/guide/data_performance)). Type
 ```cmd
-  $ python data_se.py                            
+  $ python data_se.py --download=1                          
 ```
+  * `--download`:
+    * `--download=1`: it will automatically download all of the training data and then start to work on feature extraction.
+    * `--download=0`: it will assume dataset had been downloaded and start to work on feature extraction.
 2. Train your model. Type
 ```cmd
   $ python train_se.py --epoch_loaded='random' --nn_arch='nn_arch/def_se_nn_arch72_mel.txt'
@@ -68,18 +73,17 @@ This will directly use the already saved wave file `--test_wavefile='test_wavs/s
     - `pspec`: power spectrogram
 3.  Test from recorded wave file. Type
 ```cmd
-  $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
+  $ python test_se.py --epoch_loaded=62 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
 ```
   * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
   * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
-  * The argument `--epoch_loaded=85` means it will load the model saved in epoch = 85.
-  * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
-  * Alternatively, you can run the already saved wave file via setting `--recording=0`
-```cmd
-  $ python test_se.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=0 --test_wavefile='test_wavs/speech.wav' --feat_type='mel' 
-```
-  * This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
-
+  * The argument `--epoch_loaded=62` means it will load the model saved in epoch = 62.
+  * `--recording`:
+    * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
+    * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
+  * `--feat_type='mel'`: type of feature extraction.
+    - `mel`: mel spectrogram
+    - `pspec`: power spectrogram
 # Convert TF-model to C table
 To run the model on the embedded system, Apollo4 in our cae, we need a tool to support
 1. A neural network architecture, equivalent to Tensorflow, to perform on the desired microcontroller,
@@ -97,11 +101,11 @@ To resolve this deficiency,
 ## C table conversion
  To convert the trained model by Tensorflow to C table, type:
 ```cmd
-  $ python c_code_table_converter.py --epoch_loaded=85 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --net_id=3 --net_name='se'
+  $ python c_code_table_converter.py --epoch_loaded=62 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --net_id=3 --net_name='se'
 ```
   * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
   * The argument `--s2i_nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
-  * The argument `--epoch_loaded=85` means it will load the model saved in epoch = 800.
+  * The argument `--epoch_loaded=62` means it will load the model saved in epoch = 800.
   * The argument `--net_name='se'` provides the this neural net a specific name. This is very important if you use sevearal NNs.Ensure that you only assign each NN one and only one `net_name`.
   * The argument `--net_id=3` provides the NN an identification. Ensure that you only assign each NN one and only one `net_id`.
   

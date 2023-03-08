@@ -18,8 +18,8 @@ from nnsp_pack.load_nn_arch import load_nn_arch, setup_nn_folder
 from nnsp_pack.tf_basic_math import tf_log10_eps, tf_power_eps
 import c_code_table_converter
 
-SHOW_STEPS          = True
-DISPLAY_HISTOGRAM   = True
+SHOW_STEPS          = False
+DISPLAY_HISTOGRAM   = False
 BLOCKS_PER_AUDIO    = 5
 DIM_TARGET          = 257
 physical_devices    = tf.config.list_physical_devices('GPU')
@@ -329,21 +329,22 @@ def main(args):
         tf.print(f'\n(EP {epoch})\n', end = '')
 
         # Training phase
-        epoch_proc(
-            nn_train,
-            optimizer,
-            dataset,
-            fnames['train'],
-            batchsize,
-            timesteps,
-            training        = True,
-            zero_state      = False,
-            norm_mean       = stats['nMean_feat'],
-            norm_inv_std    = stats['nInvStd'],
-            num_dnsampl     = num_dnsampl,
-            num_context     = num_context,
-            quantized       = quantized,
-            feat_type       = args.feat_type)
+        if 1:
+            epoch_proc(
+                nn_train,
+                optimizer,
+                dataset,
+                fnames['train'],
+                batchsize,
+                timesteps,
+                training        = True,
+                zero_state      = False,
+                norm_mean       = stats['nMean_feat'],
+                norm_inv_std    = stats['nInvStd'],
+                num_dnsampl     = num_dnsampl,
+                num_context     = num_context,
+                quantized       = quantized,
+                feat_type       = args.feat_type)
 
         nn_train.duplicated_to(
                 nn_infer,
@@ -413,7 +414,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch72_mel.txt',
+        default='nn_arch/def_se_nn_arch.txt',
         help='nn architecture')
 
     argparser.add_argument(
@@ -458,7 +459,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-l',
         '--learning_rate',
-        default = 1 * 10**-4,
+        default = 4 * 10**-4,
         type=float,
         help='learning rate')
 
@@ -472,7 +473,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default='latest',
+        default='random',
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \

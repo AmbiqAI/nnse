@@ -30,9 +30,14 @@ def load_nn_arch(filename):
     dropprobs = nn_search(('dropprob'), lines, dtype=float)
     layer_types = nn_search(('layer_type'), lines, dtype=str)
     activations = nn_search(('activation'), lines, dtype=str)
-
-    num_context = nn_search(('kernel_size'), lines, dtype=int)[0]
-    num_dnsampl = nn_search(('strides'), lines, dtype=int)[0]
+    try:
+        num_context = nn_search(('kernel_size'), lines, dtype=int)[0]
+    except:
+        num_context = 1
+    try:
+        num_dnsampl = nn_search(('strides'), lines, dtype=int)[0]
+    except:
+        num_dnsampl = 1
 
     print(f"\nLoad nn_arch={filename}:")
     print("neurons:", size_neurons)

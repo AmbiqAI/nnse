@@ -6,7 +6,9 @@ def cross_entropy(target,       # trget
                   estimation,   # estimator
                   masking,      # mask
                   eps = tf.constant(2**-15, dtype = tf.float32)): # epsilon
-    """Cross entropy loss per step"""
+    """
+    Cross entropy loss per step
+    """
     loss = -tf.reduce_sum(
         masking * target * tf.math.log(tf.math.maximum(estimation, eps)) )
     steps = tf.reduce_sum(masking)
@@ -20,10 +22,11 @@ def loss_mse(
         reg = 0,       # regularization,
         lam = 1.0  # coefficient of reg
         ):
-    """MSE loss per step"""
-    loss = tf.reduce_sum(
+    """
+    MSE loss per step
+    """
+    mse = tf.reduce_sum(
         masking * tf.math.square(target - estimation) )
     steps = tf.reduce_sum(masking)
-    ave_loss = loss + lam * reg
-    ave_loss = loss / steps
+    ave_loss = mse / steps + lam * reg
     return ave_loss, steps

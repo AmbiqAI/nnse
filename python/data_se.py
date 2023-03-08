@@ -19,6 +19,7 @@ from nnsp_pack import tfrecord_converter_se_split
 from nnsp_pack.feature_module import FeatureClass, display_stft_all
 from nnsp_pack import add_noise
 from nnsp_pack import boto3_op
+from nnsp_pack.se_download import se_download
 
 DEBUG = False
 UPLOAD_TFRECORD_S3 = False
@@ -41,8 +42,8 @@ def download_data():
     download data
     """
     audio_lists = [
-        'data/test_se.csv',
-        'data/train_se.csv',
+        'data/test_files_se.csv',
+        'data/train_files_se.csv',
         'data/noise_list.csv']
     s3 = boto3.client('s3')
     boto3_op.s3_download(S3_BUCKET, audio_lists)
@@ -227,6 +228,11 @@ def main(args):
     """
     main function to generate all training and testing data
     """
+    download = args.download
+    datasize_noise = args.datasize_noise
+    if download:
+        se_download()
+
     if DOWLOAD_DATA:
         s3 = download_data()
     if args.wandb_track:
@@ -238,13 +244,17 @@ def main(args):
 
     sets_categories = ['train', 'test']
 
-    snr_dbs = [-6, -3, 0, 3, 6, 9, 12, 15, 18, 21, 100]
-
+    # snr_dbs = [-6, -3, 0, 3, 6, 9, 12, 15, 18, 21, 100]
+    snr_dbs = [-12, -9, -6, -3, 0, 3, 6, 9, 12, 24]
     ntypes = [
+        'ESC-50-MASTER',
         'wham_noise',
-        'musan/music'
+        'musan/music',
+        # 'others',
+        # 'FSD50K',
         ]
 
+    # Prepare noise dataset, train and test sets
     os.makedirs('data/noise_list', exist_ok=True)
     for ntype in ntypes:
         if ntype=='wham_noise':
@@ -258,6 +268,43 @@ def main(args):
                     for name in lst_ns:
                         name = re.sub(r'\\', '/', name)
                         file.write(f'{name}\n')
+        elif ntype in {'FSD50K','ESC-50-MASTER'}:
+            with open(f'wavs/noise/{ntype}/non_speech.csv', 'r') as file: # pylint: disable=unspecified-encoding
+                lines = file.readlines()
+            random.shuffle(lines)
+            lst_ns={}
+            start = int(len(lines) / 5)
+            lst_ns['test'] = lines[:start]
+            lst_ns['train'] = lines[start:]
+
+            for set0 in ['train', 'test']:
+                noise_files_lst = f'data/noise_list/{set0}_noiselist_{ntype}.csv'
+
+                with open(noise_files_lst, 'w') as file: # pylint: disable=unspecified-encoding
+                    for name in lst_ns[set0]:
+                        name = re.sub(r'\\', '/', name)
+                        file.write(f'{name}')
+        elif ntype=='others':
+            ntype0 = re.sub(r'/', '_', ntype)
+            noise_files_train = f'data/noise_list/train_noiselist_{ntype0}.csv'
+            noise_files_test = f'data/noise_list/test_noiselist_{ntype0}.csv'
+            lst_ns = add_noise.get_noise_files_new(f"{ntype}/groups")
+            lst_ns_must = add_noise.get_noise_files_new(f"{ntype}/must")
+            random.shuffle(lst_ns)
+            random.shuffle(lst_ns_must)
+            start = int(len(lst_ns) / 5)
+            with open(noise_files_train, 'w') as file: # pylint: disable=unspecified-encoding
+                for name in lst_ns[start:]:
+                    name = re.sub(r'\\', '/', name)
+                    file.write(f'{name}\n')
+                for name in lst_ns_must:
+                    name = re.sub(r'\\', '/', name)
+                    file.write(f'{name}\n')
+
+            with open(noise_files_test, 'w') as file:  # pylint: disable=unspecified-encoding
+                for name in lst_ns[:start]:
+                    name = re.sub(r'\\', '/', name)
+                    file.write(f'{name}\n')
         else:
             ntype0 = re.sub(r'/', '_', ntype)
             noise_files_train = f'data/noise_list/train_noiselist_{ntype0}.csv'
@@ -282,9 +329,11 @@ def main(args):
 
         with open(target_files[train_set], 'r') as file: # pylint: disable=unspecified-encoding
             filepaths = file.readlines()
-            # len0 = len(filepaths)
-            # random.shuffle(filepaths)
-            # filepaths = filepaths[:len0 // 4]
+            random.shuffle(filepaths)
+            if train_set=='train':
+                filepaths = filepaths[:datasize_noise]
+            else:
+                filepaths = filepaths[:int(datasize_noise / 5)]
 
         blk_size = int(np.floor(len(filepaths) / args.num_procs))
         sub_src = []
@@ -351,7 +400,7 @@ def main(args):
 
     if not DEBUG:
         for train_set in sets_categories:
-            with open(f'data/{train_set}_tfrecords_se.csv', 'w') as file: # pylint: disable=unspecified-encoding
+            with open(f"data/{train_set}_tfrecords_se.csv", 'w') as file: # pylint: disable=unspecified-encoding
                 random.shuffle(tot_success_dict[train_set])
                 for tfrecord in tot_success_dict[train_set]:
                     tfrecord = re.sub(r'\\', '/', tfrecord)
@@ -362,6 +411,12 @@ if __name__ == "__main__":
 
     argparser = argparse.ArgumentParser(
         description='Generate TFrecord formatted input data from a raw speech commands dataset')
+    argparser.add_argument(
+        '-d',
+        '--download',
+        type    = int,
+        default = 1,
+        help    = 'download training data')
 
     argparser.add_argument(
         '-t',
@@ -375,10 +430,17 @@ if __name__ == "__main__":
         help    = 'path to test data file')
 
     argparser.add_argument(
+        '-s',
+        '--datasize_noise',
+        type    = int,
+        default = 30000,
+        help='How many speech samples per noise')
+
+    argparser.add_argument(
         '-n',
         '--num_procs',
         type    = int,
-        default = 2,
+        default = 10,
         help='How many processor cores to use for execution')
 
     argparser.add_argument(
