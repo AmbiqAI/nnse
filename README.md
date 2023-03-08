@@ -25,7 +25,7 @@ To work on Apollo4, you need
 This speech enhancement model is based on 16kHZ sampling rate. The model size is about 100kB.
 
 ### `Dataset`
-You need to download several datasets. Please read the license carefully. The detail can be found [here](./docs/README.md).
+The SE model is trained based on several audio dataset, including human speech and noises. Before you use this repo, please read on their license agreements carefully in [here](./docs/README.md).
 
 ## Compiling and Running a Pre-Trained Model
 From the `nnse/evb/` directory:

@@ -23,7 +23,7 @@ Note that all python scripts described here are all under the folder `nnse/pytho
     deactivate
     ```
 ## Dataset
-You need to download the required dataset. Please read the licenses carefully. Please see [here](../docs/README.md).
+Before working on training SE model, we need to download the required datasets. Please read on their license agreements carefully in [here](../docs/README.md).
 ## Quick start
 We provided the 3 already trained models. The user can directly try on it. \
 `Small size model:` `~100k` parameters
