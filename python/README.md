@@ -57,11 +57,16 @@ We provided the 3 already trained models. The user can directly try on it. \
 ## Training procedure
 1. Feature extraction and save your features as tfrecord (see [here](https://www.tensorflow.org/guide/data) and [here](https://www.tensorflow.org/guide/data_performance)). Type
     ```cmd
-      $ python data_se.py --download=1                          
+      $ python data_se.py --download=1 --dataset_noise=30000                     
     ```
     * `--download`:
       * `--download=1`: it will automatically download all of the training data and then start to work on feature extraction.
       * `--download=0`: it will assume dataset had been downloaded and start to work on feature extraction.
+    * `--datasize_noise`: the size of training dataset per noise, e.g.,
+      * `--datasize_noise=30000`: it randomly chooses 30000 speech samples on the training dataset (total size of training dataset is `93118`)
+      * `--datasize_noise=-1`: it uses the total size of training dataset 
+      (`99318` speech samples)
+            
 2. Train your model. Type
     ```cmd
       $ python train_se.py --epoch_loaded='random' --nn_arch='nn_arch/def_se_nn_arch72_mel.txt'
