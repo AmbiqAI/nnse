@@ -19,7 +19,7 @@ from nnsp_pack.tf_basic_math import tf_log10_eps, tf_power_eps
 import c_code_table_converter
 
 SHOW_STEPS          = False
-DISPLAY_HISTOGRAM   = False
+DISPLAY_HISTOGRAM   = True
 BLOCKS_PER_AUDIO    = 5
 DIM_TARGET          = 257
 physical_devices    = tf.config.list_physical_devices('GPU')

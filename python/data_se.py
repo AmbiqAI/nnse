@@ -276,7 +276,8 @@ def main(args):
             start = int(len(lines) / 5)
             lst_ns['test'] = lines[:start]
             lst_ns['train'] = lines[start:]
-
+            lst_ns_must = add_noise.get_noise_files_new("others/must")
+            random.shuffle(lst_ns_must)
             for set0 in ['train', 'test']:
                 noise_files_lst = f'data/noise_list/{set0}_noiselist_{ntype}.csv'
 
@@ -284,6 +285,10 @@ def main(args):
                     for name in lst_ns[set0]:
                         name = re.sub(r'\\', '/', name)
                         file.write(f'{name}')
+                    # if set0=='train' and ntype=='ESC-50-MASTER':
+                    #     for name in lst_ns_must:
+                    #         name = re.sub(r'\\', '/', name)
+                    #         file.write(f'{name}\n')
         elif ntype=='others':
             ntype0 = re.sub(r'/', '_', ntype)
             noise_files_train = f'data/noise_list/train_noiselist_{ntype0}.csv'
@@ -295,9 +300,6 @@ def main(args):
             start = int(len(lst_ns) / 5)
             with open(noise_files_train, 'w') as file: # pylint: disable=unspecified-encoding
                 for name in lst_ns[start:]:
-                    name = re.sub(r'\\', '/', name)
-                    file.write(f'{name}\n')
-                for name in lst_ns_must:
                     name = re.sub(r'\\', '/', name)
                     file.write(f'{name}\n')
 
@@ -330,10 +332,11 @@ def main(args):
         with open(target_files[train_set], 'r') as file: # pylint: disable=unspecified-encoding
             filepaths = file.readlines()
             random.shuffle(filepaths)
-            if train_set=='train':
-                filepaths = filepaths[:datasize_noise]
-            else:
-                filepaths = filepaths[:int(datasize_noise / 5)]
+            if datasize_noise != -1:
+                if train_set=='train':
+                    filepaths = filepaths[:datasize_noise]
+                else:
+                    filepaths = filepaths[:int(datasize_noise / 5)]
 
         blk_size = int(np.floor(len(filepaths) / args.num_procs))
         sub_src = []
@@ -415,7 +418,7 @@ if __name__ == "__main__":
         '-d',
         '--download',
         type    = int,
-        default = 1,
+        default = 0,
         help    = 'download training data')
 
     argparser.add_argument(

@@ -32,7 +32,7 @@ We provided the 3 already trained models. The user can directly try on it. \
 ```
 `Medium size model:` ~`400k` paramters
 ```cmd
-  $ python test_se.py --epoch_loaded=57 --nn_arch='nn_arch/def_se_nn_arch128_pspec.txt' --recording=1  --feat_type='pspec' 
+  $ python test_se.py --epoch_loaded=140 --nn_arch='nn_arch/def_se_nn_arch128_pspec.txt' --recording=1  --feat_type='pspec' 
 ```
 `Large size model:` ~`1.116M` paramters
 ```cmd
@@ -44,6 +44,9 @@ We provided the 3 already trained models. The user can directly try on it. \
   * `--recording`:
     * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
     * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
+      ```py
+      $ python test_se.py --epoch_loaded=70 --nn_arch='nn_arch/def_se_nn_arch256_pspec.txt' --recording=0  --feat_type='pspec' --test_wavefile='test_wavs/speech.wav' 
+      ```
   * `--feat_type`: type of feature extraction.
     - `mel`: mel spectrogram
     - `pspec`: power spectrogram
