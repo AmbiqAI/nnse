@@ -1,28 +1,27 @@
 # NN SE (NNSE) model
 This document explains how we train speech enhancement (SE) by using recurrent neural network.
 ## Prerequisite
-- Python 3.7+
-
 Note that all python scripts described here are all under the folder `nnse/python`
-1. (optional but recommended) Create a python [virtualenv](https://docs.python.org/3/library/venv.html) and install python dependencies into it:
-- Linux
-```
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-# call other python tasks defined below with this active
-# then when finished with this virtualenv type:
-deactivate
-```
-- Windows: in command window, type
-```cmd
-python -m venv .venv
-.venv/Scripts/activate.bat
-pip install -r requirements.txt
-# call other python tasks defined below with this active
-# then when finished with this virtualenv type:
-deactivate
-```
+- Python 3.7+
+- (optional but recommended) Create a python [virtualenv](https://docs.python.org/3/library/venv.html) and install python dependencies into it:
+  - Linux
+    ```
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+    # call other python tasks defined below with this active
+    # then when finished with this virtualenv type:
+    deactivate
+    ```
+  - Windows: in command window, type
+    ```cmd
+    python -m venv .venv
+    .venv/Scripts/activate.bat
+    pip install -r requirements.txt
+    # call other python tasks defined below with this active
+    # then when finished with this virtualenv type:
+    deactivate
+    ```
 ## Dataset
 You need to download the required dataset. Please read the licenses carefully. Please see [here](../docs/README.md).
 ## Quick start
@@ -50,40 +49,40 @@ Argruments:
     - `pspec`: power spectrogram
 ## Training procedure
 1. Feature extraction and save your features as tfrecord (see [here](https://www.tensorflow.org/guide/data) and [here](https://www.tensorflow.org/guide/data_performance)). Type
-```cmd
-  $ python data_se.py --download=1                          
-```
-  * `--download`:
-    * `--download=1`: it will automatically download all of the training data and then start to work on feature extraction.
-    * `--download=0`: it will assume dataset had been downloaded and start to work on feature extraction.
+    ```cmd
+      $ python data_se.py --download=1                          
+    ```
+    * `--download`:
+      * `--download=1`: it will automatically download all of the training data and then start to work on feature extraction.
+      * `--download=0`: it will assume dataset had been downloaded and start to work on feature extraction.
 2. Train your model. Type
-```cmd
-  $ python train_se.py --epoch_loaded='random' --nn_arch='nn_arch/def_se_nn_arch72_mel.txt'
-```
-  * The argument `--epoch_loaded` represents which epoch of the weight table to be loaded
-    - `--epoch_loaded='random'`means you start to train NN from a   randomly initiialized set of weights
-    - `--epoch_loaded='latest'`means you start to train NN from the lateset set of weights of that epoch to be saved
-    - `--epoch_loaded=10` (or any non-negative integer) means we will attempt to load a model from the previously saved epoch=10 if it exists.
-  * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt` (see [here](nn_arch/def_s2i_nn_arch.txt)). Also, the trained model is saved in the folder `models_trained/def_se_nn_arch72_mel`. Note that the foldername `def_se_nn_arch72_mel` is the same as definition of nn architecture, `def_se_nn_arch72_mel.txt`, except of removing the prefix `def_` and suffix `.txt`.
-    - `NN architecture`: our nn architecture only supports sequential model (see the example [here](nn_arch/def_s2i_nn_arch.txt)). 
-      - The layer type supports `fc`, `lstm`, `conv1d`
-      - Activation type supports `relu6`, `tanh`, `sigmoid`, `linear`
-  * `--feat_type='mel'`: type of feature extraction.
-    - `mel`: mel spectrogram
-    - `pspec`: power spectrogram
+    ```cmd
+      $ python train_se.py --epoch_loaded='random' --nn_arch='nn_arch/def_se_nn_arch72_mel.txt'
+    ```
+    * The argument `--epoch_loaded` represents which epoch of the weight table to be loaded
+      - `--epoch_loaded='random'`means you start to train NN from a   randomly initiialized set of weights
+      - `--epoch_loaded='latest'`means you start to train NN from the lateset set of weights of that epoch to be saved
+      - `--epoch_loaded=10` (or any non-negative integer) means we will attempt to load a model from the previously saved epoch=10 if it exists.
+    * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt` (see [here](nn_arch/def_s2i_nn_arch.txt)). Also, the trained model is saved in the folder `models_trained/def_se_nn_arch72_mel`. Note that the foldername `def_se_nn_arch72_mel` is the same as definition of nn architecture, `def_se_nn_arch72_mel.txt`, except of removing the prefix `def_` and suffix `.txt`.
+      - `NN architecture`: our nn architecture only supports sequential model (see the example [here](nn_arch/def_s2i_nn_arch.txt)). 
+        - The layer type supports `fc`, `lstm`, `conv1d`
+        - Activation type supports `relu6`, `tanh`, `sigmoid`, `linear`
+    * `--feat_type='mel'`: type of feature extraction.
+      - `mel`: mel spectrogram
+      - `pspec`: power spectrogram
 3.  Test from recorded wave file. Type
-```cmd
-  $ python test_se.py --epoch_loaded=62 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
-```
-  * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
-  * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
-  * The argument `--epoch_loaded=62` means it will load the model saved in epoch = 62.
-  * `--recording`:
-    * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
-    * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
-  * `--feat_type='mel'`: type of feature extraction.
-    - `mel`: mel spectrogram
-    - `pspec`: power spectrogram
+    ```cmd
+      $ python test_se.py --epoch_loaded=62 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
+    ```
+    * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
+    * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
+    * The argument `--epoch_loaded=62` means it will load the model saved in epoch = 62.
+    * `--recording`:
+      * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
+      * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
+    * `--feat_type='mel'`: type of feature extraction.
+      - `mel`: mel spectrogram
+      - `pspec`: power spectrogram
 # Convert TF-model to C table
 To run the model on the embedded system, Apollo4 in our cae, we need a tool to support
 1. A neural network architecture, equivalent to Tensorflow, to perform on the desired microcontroller,
