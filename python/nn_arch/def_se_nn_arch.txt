@@ -1,0 +1,28 @@
+input_neurons 72
+dropprob 0.1
+
+layer_type conv1d
+num_filters 72
+kernel_size 6
+strides 1
+activation tanh
+dropprob 0.25
+
+layer_type lstm
+layer_neurons 72
+activation tanh
+dropprob 0.25
+
+layer_type fc
+layer_neurons 72
+activation relu6
+dropprob 0.25
+
+layer_type fc
+layer_neurons 72
+activation relu6
+dropprob 0.25
+
+layer_type fc
+layer_neurons 257
+activation sigmoid
