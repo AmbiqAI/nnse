@@ -414,13 +414,13 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch.txt',
+        default='nn_arch/def_se_nn_arch256_pspec.txt',
         help='nn architecture')
 
     argparser.add_argument(
         '-ft',
         '--feat_type',
-        default='mel',
+        default='pspec',
         help='feature type: \'mel\'or \'pspec\'')
 
     argparser.add_argument(
@@ -459,7 +459,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-l',
         '--learning_rate',
-        default = 4 * 10**-4,
+        default = 4 * 10**-5,
         type=float,
         help='learning rate')
 
@@ -473,7 +473,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default='random',
+        default='latest',
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \
