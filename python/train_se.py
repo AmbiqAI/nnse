@@ -459,7 +459,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-l',
         '--learning_rate',
-        default = 4 * 10**-5,
+        default = 1 * 10**-5,
         type=float,
         help='learning rate')
 

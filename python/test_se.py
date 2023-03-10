@@ -154,7 +154,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch256_pspec.txt',
+        default='nn_arch/def_se_nn_arch128_pspec.txt',
         help='nn architecture')
 
     argparser.add_argument(
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-v',
         '--test_wavefile',
-        default = 'test_wavs/keyboard_steak.wav',
+        default = 'test_wavs/i_like_steak.wav',
         help    = 'The wavfile name to be tested')
 
     argparser.add_argument(
@@ -185,7 +185,7 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 39, # 70
+        default= 140, # 70
         help='starting epoch')
 
     main(argparser.parse_args())
