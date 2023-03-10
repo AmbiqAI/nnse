@@ -1,0 +1,11 @@
+tensorflow
+numpy
+librosa
+matplotlib
+sounddevice
+soundfile
+argparse
+boto3
+wandb
+pyaudio
+pyqt5
