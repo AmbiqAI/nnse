@@ -24,7 +24,8 @@ class NNInferClass:
             quantized=False,
             show_histogram=False,
             np_inference=False,
-            feat_type='mel'):
+            feat_type='mel',
+            epoch_path = None):
 
         self.params_audio = params_audio
         self.show_histogram = show_histogram
@@ -43,6 +44,9 @@ class NNInferClass:
             batchsize   = 1,
             nDownSample = self.num_dnsampl,
             kernel_size = num_context)
+
+        if epoch_path is not None:
+            folder_nn = epoch_path
 
         nn_infer.load_weights(
                 f'{folder_nn}/checkpoints/model_checkpoint_ep{epoch_loaded}' )
@@ -174,7 +178,6 @@ class NNInferClass:
         feats_expand = np.expand_dims(self.feats, axis=0)
 
         if self.count_run == 0:
-
             est, self.states = self.nn_infer(feats_expand, 1.0, self.states, training=False)
             est = est[0,0].numpy()
             self.post_nn_infer(est)

@@ -5,7 +5,7 @@
 """
 import numpy as np
 import matplotlib.pyplot as plt
-from converter_fix_point import fakefix
+from nnsp_pack.converter_fix_point import fakefix
 
 def gen_mel_bank(
                 fftsize         = 512,

@@ -38,7 +38,7 @@ class stft_class: # pylint: disable=invalid-name
         self.ibuf[:self.overlap_size] = self.ibuf[self.hop:]
         return data_freq
 
-    def istft_frame_proc(
+    def istft_raw_frame(
             self,
             data_freq,
             tfmask = 1.0,
@@ -49,6 +49,17 @@ class stft_class: # pylint: disable=invalid-name
         data_freq = data_freq * np.maximum(tfmask, min_tfmask)
         data = np.fft.irfft(data_freq)[:self.winsize]
         wdata = data * self.win
+        return wdata
+
+    def istft_frame_proc(
+            self,
+            data_freq,
+            tfmask = 1.0,
+            min_tfmask = 0.0):
+        """
+        istft_frame_proc
+        """
+        wdata = self.istft_raw_frame(data_freq,tf_mask,min_tfmask)
         self.obuf += wdata
         odata = self.obuf[:self.hop].copy()
         self.obuf[:self.overlap_size] = self.obuf[self.hop:]

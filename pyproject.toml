@@ -1,0 +1,41 @@
+[tool.poetry]
+name = "nnse"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <poyupaulchen@gmail.com>"]
+readme = "README.md"
+
+packages = [
+    { include = "nnsp_pack", from = "python" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.8,<3.11"
+tensorflow = {version = "^2.10.0", platform = "linux"}
+tensorflow-macos = {version = "^2.10.0", platform = "darwin"}
+tensorflow-metal = {version = "^0.6.0", platform = "darwin"}
+configargparse = "^1.5.3"
+librosa = "^0.9.2"
+pandas = "^1.5.1"
+wandb = "^0.13.4"
+boto3 = "^1.25.1"
+matplotlib = "^3.6.1"
+tensorflow-model-optimization = "^0.7.3"
+fast-bss-eval = "^0.1.4"
+pyserial = ">=3.5"
+numpy = "^1.23.4"
+fire = "^0.4.0"
+scipy = "^1.9.3"
+pyaudio = "^0.2.12"
+sounddevice = "^0.4.5"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+exclude = [
+   "datasets/**",
+   "results/**",
+   "python/se/dns4/**"  # 3rd party code from challenge organizers
+]
