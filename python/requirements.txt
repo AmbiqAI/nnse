@@ -9,3 +9,4 @@ boto3
 wandb
 pyaudio
 pyqt5
+scipy
