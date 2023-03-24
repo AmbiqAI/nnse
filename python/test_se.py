@@ -60,7 +60,7 @@ class SeClass(NNInferClass):
         file = wave.open(f"{result_folder}/output_{fname}", "wb")
         file.setnchannels(2)
         file.setsampwidth(2)
-        file.setframerate(16000)
+        file.setframerate(params_audio['sample_rate'])
 
         bks = int(len(data) / params_audio['hop'])
         feats   = []
@@ -100,7 +100,7 @@ class SeClass(NNInferClass):
             specs.T,
             feats.T,
             tfmasks.T,
-            sample_rate=16000,
+            sample_rate=params_audio['sample_rate'],
             print_name=f"{result_folder}/output_{fig_name}")
         file.close()
 
@@ -127,12 +127,12 @@ def main(args):
     data, sample_rate = sf.read(wavefile)
     if data.ndim > 1:
         data=data[:,0]
-        if sample_rate > 16000:
-            data = librosa.resample(
-                    data,
-                    orig_sr=sample_rate,
-                    target_sr=16000)
-    sd.play(data, 16000)
+    if sample_rate > PARAM_AUDIO['sample_rate']:
+        data = librosa.resample(
+                data,
+                orig_sr=sample_rate,
+                target_sr=PARAM_AUDIO['sample_rate'])
+    sd.play(data, PARAM_AUDIO['sample_rate'])
 
     se_inst = SeClass(
             args.nn_arch,
@@ -154,13 +154,13 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch128_pspec.txt',
+        default='nn_arch/def_se_nn_arch72_mel.txt',
         help='nn architecture')
 
     argparser.add_argument(
         '-ft',
         '--feat_type',
-        default='pspec',
+        default='mel',
         help='feature type: \'mel\'or \'pspec\'')
 
     argparser.add_argument(
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-v',
         '--test_wavefile',
-        default = 'test_wavs/i_like_steak.wav',
+        default = 'test_wavs/speech.wav',
         help    = 'The wavfile name to be tested')
 
     argparser.add_argument(
@@ -185,7 +185,7 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 140, # 70
+        default= 62, # 70
         help='starting epoch')
 
     main(argparser.parse_args())

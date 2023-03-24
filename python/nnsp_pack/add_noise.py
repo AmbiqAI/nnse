@@ -58,7 +58,10 @@ def get_noise_files(files_list, noise_type):
                 lst += [os.path.join(root, file.strip())]
     return lst
 
-def get_noise(fnames, length = 16000 * 5, target_sampling_rate=16000):
+def get_noise(
+        fnames,
+        length = 16000 * 5,
+        target_sampling_rate=16000):
     """Random pick ONE of noise from fnames"""
     len0 = len(fnames)
     rand_idx = np.random.randint(0, len0)

@@ -118,13 +118,11 @@ class FeatMultiProcsClass(multiprocessing.Process):
                 else:
                     if audio.ndim > 1:
                         audio=audio[:,0]
-                        if sample_rate > 16000:
-                            audio = librosa.resample(
-                                    audio,
-                                    orig_sr=sample_rate,
-                                    target_sr=16000)
-                    else:
-                        pass
+                    if sample_rate > self.feat_inst.sample_rate:
+                        audio = librosa.resample(
+                                audio,
+                                orig_sr=sample_rate,
+                                target_sr=self.feat_inst.sample_rate)
                     # decorate speech
                     speech0 = audio
 
@@ -168,7 +166,10 @@ class FeatMultiProcsClass(multiprocessing.Process):
             end_frames      = (etimes / self.params_audio_def['hop']) + 1 # target level frame
             end_frames      = end_frames.astype(np.int32)
             # add noise to sig
-            noise = add_noise.get_noise(self.noise_files[self.train_set], len(speech))
+            noise = add_noise.get_noise(
+                self.noise_files[self.train_set],
+                len(speech),
+                self.feat_inst.sample_rate)
             snr_db = self.snr_dbs[np.random.randint(0,len(self.snr_dbs))]
             audio_sn, audio_s = add_noise.add_noise(
                                     speech,
@@ -181,7 +182,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
             spec_sn, _, feat_sn, pspec_sn = self.feat_inst.block_proc(audio_sn)
             spec_s, _, feat_s, pspec_s    = self.feat_inst.block_proc(audio_s)
             if DEBUG:
-                sd.play(audio_sn, sample_rate)
+                sd.play(audio_sn, self.feat_inst.sample_rate)
                 print(fnames[2*i])
                 print(fnames[2*i + 1])
                 print(start_frames)
@@ -192,10 +193,10 @@ class FeatMultiProcsClass(multiprocessing.Process):
                     flabel[start_frame: end_frame] = target
                 display_stft_all(audio_sn, spec_sn.T, feat_sn.T,
                                  audio_s,  spec_s.T,  feat_s.T,
-                                 sample_rate, label_frame=flabel)
+                                 self.feat_inst.sample_rate, label_frame=flabel)
                 os.makedirs('test_wavs', exist_ok=True)
-                sf.write(f'test_wavs/speech_{self.cnt}.wav', audio_sn, sample_rate)
-                sf.write(f'test_wavs/speech_{self.cnt}_ref.wav', speech, sample_rate)
+                sf.write(f'test_wavs/speech_{self.cnt}.wav', audio_sn, self.feat_inst.sample_rate)
+                sf.write(f'test_wavs/speech_{self.cnt}_ref.wav', speech, self.feat_inst.sample_rate)
 
                 self.cnt = self.cnt + 1
 
