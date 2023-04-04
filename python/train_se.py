@@ -402,6 +402,8 @@ def main(args):
             pickle.dump(acc, file)
 
         tf.print('Epoch spent ', tf_round(tf.timestamp() - t_start), ' seconds')
+        print(f"(train) best epoch picked by loss = {np.argmin(loss['train'][0: epoch+1])}")
+        print(f"(test)  best epoch picked by loss = {np.argmin(loss['test'][0: epoch+1])}")
 
 if __name__ == "__main__":
 
@@ -459,7 +461,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-l',
         '--learning_rate',
-        default = 1 * 10**-4,
+        default = 4 * 10**-4,
         type=float,
         help='learning rate')
 

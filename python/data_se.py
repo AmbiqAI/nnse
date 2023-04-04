@@ -24,7 +24,7 @@ from nnsp_pack.se_download import se_download
 DEBUG = False
 UPLOAD_TFRECORD_S3 = False
 DOWLOAD_DATA = False
-
+REVERB = True
 if UPLOAD_TFRECORD_S3:
     print('uploading tfrecords to s3 will slow down the process')
 S3_BUCKET = "ambiqai-speech-commands-dataset"
@@ -57,7 +57,10 @@ class FeatMultiProcsClass(multiprocessing.Process):
     def __init__(self, id_process,
                  name, src_list, train_set, ntype,
                  noise_files, snr_dbs, success_dict,
-                 params_audio_def):
+                 params_audio_def,
+                 num_procs = 8,
+                 reverb_lst=None,
+                 reverb_prob=0):
 
         multiprocessing.Process.__init__(self)
         self.success_dict = success_dict
@@ -65,6 +68,9 @@ class FeatMultiProcsClass(multiprocessing.Process):
         self.name               = name
         self.src_list           = src_list
         self.params_audio_def   = params_audio_def
+        self.num_procs          = num_procs
+        self.reverb_lst         = reverb_lst
+        self.reverb_prob        = reverb_prob
         self.feat_inst      = FeatureClass(
                                 win_size        = params_audio_def['win_size'],
                                 hop             = params_audio_def['hop'],
@@ -98,6 +104,8 @@ class FeatMultiProcsClass(multiprocessing.Process):
         MAX_LEN_SP = 25 * 16000
         random.shuffle(fnames)
         for i in range(len(fnames) >> 1):
+            if self.num_procs-1 == self.id_process:
+                print(f"\rProcessing wav {i}/{len(fnames) >> 1}", end="")
             success = 1
             stimes = []
             etimes = []
@@ -166,6 +174,25 @@ class FeatMultiProcsClass(multiprocessing.Process):
             end_frames      = (etimes / self.params_audio_def['hop']) + 1 # target level frame
             end_frames      = end_frames.astype(np.int32)
             # add noise to sig
+            rir = None
+            reverbing = False
+            if self.reverb_lst:
+                rd_reverb = np.random.uniform(0,1)
+                if rd_reverb < self.reverb_prob:
+                    reverbing = True
+                    idx = np.random.randint(0, len(self.reverb_lst))
+                    # print(self.reverb_lst[idx])
+                    rir, sample_rate_rir = sf.read(self.reverb_lst[idx])
+
+                    if rir.ndim > 1:
+                        rir = rir[:,0]
+                    if sample_rate_rir > self.feat_inst.sample_rate:
+                        rir = librosa.resample(
+                                rir,
+                                orig_sr=sample_rate_rir,
+                                target_sr=self.feat_inst.sample_rate)
+                    rir = rir[:3000]
+            # add reverb
             noise = add_noise.get_noise(
                 self.noise_files[self.train_set],
                 len(speech),
@@ -177,11 +204,14 @@ class FeatMultiProcsClass(multiprocessing.Process):
                                     snr_db,
                                     stime, etime,
                                     return_all=True,
-                                    snr_dB_improved = 20)
+                                    snr_dB_improved = 20,
+                                    rir=rir)
             # feature extraction of sig
             spec_sn, _, feat_sn, pspec_sn = self.feat_inst.block_proc(audio_sn)
             spec_s, _, feat_s, pspec_s    = self.feat_inst.block_proc(audio_s)
             if DEBUG:
+                if reverbing:
+                    print('has reverb')
                 sd.play(audio_sn, self.feat_inst.sample_rate)
                 print(fnames[2*i])
                 print(fnames[2*i + 1])
@@ -231,6 +261,7 @@ def main(args):
     """
     download = args.download
     datasize_noise = args.datasize_noise
+    reverb_prob = args.reverb_prob
     if download:
         se_download()
 
@@ -245,16 +276,19 @@ def main(args):
 
     sets_categories = ['train', 'test']
 
-    # snr_dbs = [-6, -3, 0, 3, 6, 9, 12, 15, 18, 21, 100]
-    snr_dbs = [-12, -9, -6, -3, 0, 3, 6, 9, 12, 24]
+    snr_dbs = [-6, -3, 0, 3, 6, 9, 12, 24]
     ntypes = [
         'ESC-50-MASTER',
         'wham_noise',
-        'musan/music',
-        # 'others',
+        # "social_noise",
         'FSD50K',
-        ]
-
+        'musan',
+        # 'traffic'
+    ]
+    if REVERB:
+        lst_reverb = add_noise.get_noise_files_new("rirs_noises/RIRS_NOISES/simulated_rirs")
+    else:
+        lst_reverb = None
     # Prepare noise dataset, train and test sets
     os.makedirs('data/noise_list', exist_ok=True)
     for ntype in ntypes:
@@ -275,10 +309,10 @@ def main(args):
             random.shuffle(lines)
             lst_ns={}
             start = int(len(lines) / 5)
-            lst_ns['test'] = lines[:start]
+
             lst_ns['train'] = lines[start:]
-            # lst_ns_must = add_noise.get_noise_files_new("others/must")
-            # random.shuffle(lst_ns_must)
+            lst_ns['test'] = lines[:start]
+
             for set0 in ['train', 'test']:
                 noise_files_lst = f'data/noise_list/{set0}_noiselist_{ntype}.csv'
 
@@ -286,28 +320,39 @@ def main(args):
                     for name in lst_ns[set0]:
                         name = re.sub(r'\\', '/', name)
                         file.write(f'{name}')
-                    # if set0=='train' and ntype=='ESC-50-MASTER':
-                    #     for name in lst_ns_must:
-                    #         name = re.sub(r'\\', '/', name)
-                    #         file.write(f'{name}\n')
-        elif ntype=='others':
-            ntype0 = re.sub(r'/', '_', ntype)
-            noise_files_train = f'data/noise_list/train_noiselist_{ntype0}.csv'
-            noise_files_test = f'data/noise_list/test_noiselist_{ntype0}.csv'
-            lst_ns = add_noise.get_noise_files_new(f"{ntype}/groups")
-            lst_ns_must = add_noise.get_noise_files_new(f"{ntype}/must")
-            random.shuffle(lst_ns)
-            random.shuffle(lst_ns_must)
-            start = int(len(lst_ns) / 5)
-            with open(noise_files_train, 'w') as file: # pylint: disable=unspecified-encoding
-                for name in lst_ns[start:]:
-                    name = re.sub(r'\\', '/', name)
-                    file.write(f'{name}\n')
+                    if ntype=='ESC-50-MASTER':
+                        lst_must = add_noise.get_noise_files_new('others/must')
+                        for name in lst_must:
+                            name = re.sub(r'\\', '/', name)
+                            file.write(f'{name}\n')
+        elif ntype in {'musan'}:
+            lst_music = add_noise.get_noise_files_new('musan/music')
+            lst_noise = add_noise.get_noise_files_new('musan/noise')
+            lines = lst_music + lst_noise
+            random.shuffle(lines)
+            lst_ns={}
+            start = int(len(lines) / 5)
+            lst_ns['test'] = lines[:start]
+            lst_ns['train'] = lines[start:]
+            for set0 in ['train', 'test']:
+                noise_files_lst = f'data/noise_list/{set0}_noiselist_{ntype}.csv'
 
-            with open(noise_files_test, 'w') as file:  # pylint: disable=unspecified-encoding
-                for name in lst_ns[:start]:
-                    name = re.sub(r'\\', '/', name)
-                    file.write(f'{name}\n')
+                with open(noise_files_lst, 'w') as file: # pylint: disable=unspecified-encoding
+                    for name in lst_ns[set0]:
+                        name = re.sub(r'\\', '/', name)
+                        file.write(f'{name}\n')
+
+        elif ntype in {'social_noise', 'traffic'}:
+            lst_ns={}
+            lst_ns['test'] = add_noise.get_noise_files_new(f'{ntype}/test')
+            lst_ns['train'] = add_noise.get_noise_files_new(f'{ntype}/train')
+            for set0 in ['train', 'test']:
+                noise_files_lst = f'data/noise_list/{set0}_noiselist_{ntype}.csv'
+
+                with open(noise_files_lst, 'w') as file: # pylint: disable=unspecified-encoding
+                    for name in lst_ns[set0]:
+                        name = re.sub(r'\\', '/', name)
+                        file.write(f'{name}\n')
         else:
             ntype0 = re.sub(r'/', '_', ntype)
             noise_files_train = f'data/noise_list/train_noiselist_{ntype0}.csv'
@@ -375,7 +420,10 @@ def main(args):
                         noise_files,
                         snr_dbs,
                         success_dict,
-                        params_audio_def = params_audio)
+                        params_audio_def = params_audio,
+                        num_procs = args.num_procs,
+                        reverb_lst = lst_reverb,
+                        reverb_prob = reverb_prob)
                             for i in range(args.num_procs)]
 
             start_time = time.time()
@@ -389,7 +437,7 @@ def main(args):
 
                 for proc in processes:
                     proc.join()
-                print(f"Time elapse {time.time() - start_time} sec")
+                print(f"\nTime elapse {time.time() - start_time} sec")
 
             if args.wandb_track:
                 data = wandb.Artifact(
@@ -423,6 +471,13 @@ if __name__ == "__main__":
         help    = 'download training data')
 
     argparser.add_argument(
+        '-rb',
+        '--reverb_prob',
+        type    = float,
+        default = 0.25,
+        help    = 'percentage of size for reverb dataset')
+
+    argparser.add_argument(
         '-t',
         '--train_dataset_path',
         default = 'data/train_se.csv',
@@ -437,14 +492,14 @@ if __name__ == "__main__":
         '-s',
         '--datasize_noise',
         type    = int,
-        default = 30000,
+        default = 60000,
         help='How many speech samples per noise')
 
     argparser.add_argument(
         '-n',
         '--num_procs',
         type    = int,
-        default = 10,
+        default = 8,
         help='How many processor cores to use for execution')
 
     argparser.add_argument(

@@ -14,7 +14,8 @@ def get_power(data):
 
 def add_noise(data, noise, snr_db, stime, etime,
               return_all=False,
-              snr_dB_improved = None):
+              snr_dB_improved = None,
+              rir = None):
     """Synthesize noise and speech"""
     pw_data = get_power(data[stime:etime])
     pw_noise = get_power(noise)
@@ -23,10 +24,20 @@ def add_noise(data, noise, snr_db, stime, etime,
         data = data / np.sqrt(pw_data)
     if pw_noise != 0 and snr != 0:
         noise = noise / np.sqrt(pw_noise) / np.sqrt(snr)
+    if rir is not None:
+        idx_late_reverb = np.minimum(
+            np.where(np.abs(rir).max() == rir)[0][0] + 200,
+            rir.size-1)
+        rir_e = rir.copy()
+        rir_e[idx_late_reverb:] = 0
+        data_reverb = np.convolve(data, rir,'same')
+        data = np.convolve(data, rir_e, 'same')
+        noise_reverb = data_reverb - data
+        noise = noise + noise_reverb
     output = data + noise
+
     max_val = np.abs(output).max()
     prob = np.random.uniform(0.05, 0.95, 1)
-
     gain    = prob / (max_val + 10**-5)
     output  = output * gain
     data    = data   * gain
