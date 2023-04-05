@@ -4,7 +4,7 @@ Convert numpy array to tfrecords
 import os
 import numpy as np
 import tensorflow as tf
-
+NUM_SPLIT_EXAMPLE = 5
 def make_tfrecord(
         fname,
         pspec_sn_raw,
@@ -14,8 +14,8 @@ def make_tfrecord(
     """
     with tf.io.TFRecordWriter(fname) as writer:
 
-        pspec_sn_list = np.split(pspec_sn_raw, 5, axis = 0)
-        pspec_s_list  = np.split(pspec_s_raw, 5, axis = 0)
+        pspec_sn_list = np.split(pspec_sn_raw, NUM_SPLIT_EXAMPLE, axis = 0)
+        pspec_s_list  = np.split(pspec_s_raw, NUM_SPLIT_EXAMPLE, axis = 0)
 
         for pspec_sn, pspec_s in zip(pspec_sn_list, pspec_s_list):
             timesteps, _ = pspec_s.shape
@@ -113,28 +113,24 @@ def tfrecords_pipeline(
     dataset = tf.data.Dataset.from_tensor_slices(filenames)
     if is_shuffle:
         dataset = dataset.shuffle(len(filenames), reshuffle_each_iteration=True)
-    dataset = dataset.batch(
-                    batchsize,
-                    drop_remainder=True)
+    # dataset = dataset.batch(
+    #                 batchsize,
+    #                 drop_remainder=True)
     dataset = dataset.interleave(
                 map_func           = tfrecord_convert,
-                cycle_length       = batchsize,
+                cycle_length       = NUM_SPLIT_EXAMPLE,
                 block_length       = 1,
                 deterministic      = True,
-                num_parallel_calls = tf.data.AUTOTUNE)
+                num_parallel_calls = 3)
     dataset = dataset.map(
                 mapping,
-                num_parallel_calls = tf.data.AUTOTUNE,
+                num_parallel_calls = 3,
                 deterministic = True)
     dataset = dataset.batch(
                     batchsize,
                     drop_remainder=True,
-                    num_parallel_calls = tf.data.AUTOTUNE)
-    options = tf.data.Options()
-    options.threading.max_intra_op_parallelism = 1
-    options.threading.private_threadpool_size = 6
-    dataset = dataset.with_options(options)
-    dataset = dataset.prefetch(buffer_size = tf.data.AUTOTUNE)
+                    num_parallel_calls = 3)
+    dataset = dataset.prefetch(buffer_size = 1)
     iterator = iter(dataset)
     return iterator, dataset
 
@@ -177,16 +173,16 @@ def main():
                     batchsize = 5,
                     is_shuffle=True)
 
-    for epoch in range(3):
+    for epoch in range(1):
         for batch, data  in enumerate(dataset):
             pspec_sn, _, pspec_s, _ = data
-            if batch in {0,1,2,3,4}:
+            if batch in range(10):
                 print(f"Epoch {epoch}, Batch {batch}")
                 print('pspec_sn shape:', pspec_sn.shape)
                 print('pspec_s shape:', pspec_s.shape)
                 for i in range(5):
                     print(pspec_sn[i][0,0:5])
                 print("")
-    
+
 if __name__ == "__main__":
     main()
