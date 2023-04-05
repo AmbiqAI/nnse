@@ -191,7 +191,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
                                 rir,
                                 orig_sr=sample_rate_rir,
                                 target_sr=self.feat_inst.sample_rate)
-                    rir = rir[:3000]
+                    rir = rir[:np.minimum(3000, rir.size)]
             # add reverb
             noise = add_noise.get_noise(
                 self.noise_files[self.train_set],
@@ -286,7 +286,12 @@ def main(args):
         # 'traffic'
     ]
     if REVERB:
-        lst_reverb = add_noise.get_noise_files_new("rirs_noises/RIRS_NOISES/simulated_rirs")
+        tmp = add_noise.get_noise_files_new("rirs_noises/RIRS_NOISES/simulated_rirs")
+        random.shuffle(tmp)
+        start = int(len(tmp) / 5)
+        lst_reverb = {}
+        lst_reverb = {'train': tmp[start:],
+                      'test': tmp[:start]}
     else:
         lst_reverb = None
     # Prepare noise dataset, train and test sets
@@ -423,7 +428,7 @@ def main(args):
                         params_audio_def = params_audio,
                         num_procs = args.num_procs,
                         reverb_lst = lst_reverb,
-                        reverb_prob = reverb_prob)
+                        reverb_prob = lst_reverb[train_set])
                             for i in range(args.num_procs)]
 
             start_time = time.time()
