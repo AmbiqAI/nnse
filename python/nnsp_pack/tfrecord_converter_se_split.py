@@ -113,15 +113,15 @@ def tfrecords_pipeline(
     dataset = tf.data.Dataset.from_tensor_slices(filenames)
     if is_shuffle:
         dataset = dataset.shuffle(len(filenames), reshuffle_each_iteration=True)
-    # dataset = dataset.batch(
-    #                 batchsize,
-    #                 drop_remainder=True)
+    dataset = dataset.batch(
+                    batchsize,
+                    drop_remainder=True)
     dataset = dataset.interleave(
                 map_func           = tfrecord_convert,
-                cycle_length       = NUM_SPLIT_EXAMPLE,
+                cycle_length       = batchsize,
                 block_length       = 1,
                 deterministic      = True,
-                num_parallel_calls = 3)
+                num_parallel_calls = 5)
     dataset = dataset.map(
                 mapping,
                 num_parallel_calls = 3,
