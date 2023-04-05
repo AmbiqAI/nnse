@@ -113,9 +113,9 @@ def tfrecords_pipeline(
     dataset = tf.data.Dataset.from_tensor_slices(filenames)
     if is_shuffle:
         dataset = dataset.shuffle(len(filenames), reshuffle_each_iteration=True)
-    dataset = dataset.batch(
-                    batchsize,
-                    drop_remainder=True)
+    # dataset = dataset.batch(
+    #                 batchsize,
+    #                 drop_remainder=True)
     dataset = dataset.interleave(
                 map_func           = tfrecord_convert,
                 cycle_length       = batchsize,
@@ -170,10 +170,10 @@ def main():
         fnames += [fname]
     _, dataset = tfrecords_pipeline(
                     fnames,
-                    batchsize = 5,
+                    batchsize = 10,
                     is_shuffle=True)
 
-    for epoch in range(1):
+    for epoch in range(2):
         for batch, data  in enumerate(dataset):
             pspec_sn, _, pspec_s, _ = data
             if batch in range(10):
