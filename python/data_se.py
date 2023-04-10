@@ -212,7 +212,9 @@ class FeatMultiProcsClass(multiprocessing.Process):
             if DEBUG:
                 if reverbing:
                     print('has reverb')
-                sd.play(audio_sn, self.feat_inst.sample_rate)
+                sd.play(
+                    audio_sn,
+                    self.feat_inst.sample_rate)
                 print(fnames[2*i])
                 print(fnames[2*i + 1])
                 print(start_frames)
@@ -232,9 +234,14 @@ class FeatMultiProcsClass(multiprocessing.Process):
 
             if success:
                 ntype = re.sub('/','_', self.ntype)
-                tfrecord = re.sub(  r'\.tfrecord$',
-                                    f'_snr{snr_db}dB_{ntype}.tfrecord',
-                                    tfrecord)
+                if reverbing:
+                    tfrecord = re.sub(  r'\.tfrecord$',
+                                        f'_snr{snr_db}dB_{ntype}_reverb.tfrecord',
+                                        tfrecord)
+                else:
+                    tfrecord = re.sub(  r'\.tfrecord$',
+                                        f'_snr{snr_db}dB_{ntype}.tfrecord',
+                                        tfrecord)
                 os.makedirs(os.path.dirname(tfrecord), exist_ok=True)
                 try:
                     timesteps, _  = feat_sn.shape
@@ -275,8 +282,11 @@ def main(args):
         wandb.config.update(args)
 
     sets_categories = ['train', 'test']
+    if DEBUG:
+        snr_dbs = [20]
+    else:    
+        snr_dbs = [-9, -6, -3, 0, 3, 6, 9, 12, 24]
 
-    snr_dbs = [-6, -3, 0, 3, 6, 9, 12, 24]
     ntypes = [
         'ESC-50-MASTER',
         'wham_noise',
@@ -427,8 +437,8 @@ def main(args):
                         success_dict,
                         params_audio_def = params_audio,
                         num_procs = args.num_procs,
-                        reverb_lst = lst_reverb,
-                        reverb_prob = lst_reverb[train_set])
+                        reverb_lst = lst_reverb[train_set],
+                        reverb_prob = reverb_prob)
                             for i in range(args.num_procs)]
 
             start_time = time.time()
@@ -497,7 +507,7 @@ if __name__ == "__main__":
         '-s',
         '--datasize_noise',
         type    = int,
-        default = 60000,
+        default = 10000,
         help='How many speech samples per noise')
 
     argparser.add_argument(

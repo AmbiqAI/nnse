@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from nnsp_pack.nn_module import NeuralNetClass, lstm_states, tf_round
 from nnsp_pack.tfrecord_converter_se_split import tfrecords_pipeline
-from nnsp_pack.loss_functions import loss_mse
+from nnsp_pack.loss_functions import loss_mse, loss_sdr
 from nnsp_pack.converter_fix_point import fakefix_tf
 from nnsp_pack.calculate_feat_stats_se_split import feat_stats_estimator
 from nnsp_pack.load_nn_arch import load_nn_arch, setup_nn_folder
@@ -55,13 +55,15 @@ def train_kernel(
                 states,
                 training    = training,
                 quantized   = quantized)
-
         amp_sn = tf.math.sqrt(pspec_sn)
         amp_s  = tf.math.sqrt(pspec_s)
-
+        # ave_loss, steps = loss_sdr(
+        #             amp_s,
+        #             amp_sn * est,
+        #             mask)
         ave_loss, steps = loss_mse(
-                tf_power_eps(amp_s),        # clean
-                tf_power_eps(amp_sn * est), # noisy * mask
+                (amp_s),        # clean
+                (amp_sn * est), # noisy * mask
                 masking = mask)
 
     if training:
@@ -288,7 +290,6 @@ def main(args):
                 print(f'Can not find the list {tfrecord_list[tr_set]}')
             else:
                 len0 = int(len(lines) / batchsize) * batchsize
-                # len0 = batchsize * 10
                 fnames[tr_set] = [line.strip() for line in lines[:len0]]
 
     _, dataset = tfrecords_pipeline(
@@ -416,7 +417,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch256_pspec.txt',
+        default='nn_arch/def_se_nn_arch256_pspec_mse.txt',
         help='nn architecture')
 
     argparser.add_argument(
