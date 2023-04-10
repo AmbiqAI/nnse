@@ -1,5 +1,7 @@
 # NN SE (NNSE) model
 This document explains how we train speech enhancement (SE) by using recurrent neural network.
+# Loss functions
+It is worth to compare the performance based on the loss functions listed in Table 1 (see [here](https://www.microsoft.com/en-us/research/uploads/prod/2021/08/23.pdf)).
 ## Prerequisite
 Note that all python scripts described here are all under the folder `nnse/python`
 - Python 3.7+
@@ -37,6 +39,10 @@ We provided the 3 already trained models. The user can directly try on it. \
 `Large size model:` ~`1.116M` paramters
 ```cmd
   $ python test_se.py --epoch_loaded=70 --nn_arch='nn_arch/def_se_nn_arch256_pspec.txt' --recording=1  --feat_type='pspec' 
+```
+or
+```cmd
+  $ python test_se.py --epoch_loaded=195 --nn_arch='nn_arch/def_se_nn_arch256_pspec_mse.txt' --recording=1  --feat_type='pspec' 
 ```
 `Input argruments`:
   * `--nn_arch`: it will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 

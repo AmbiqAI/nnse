@@ -30,3 +30,18 @@ def loss_mse(
     steps = tf.reduce_sum(masking)
     ave_loss = mse / steps + lam * reg
     return ave_loss, steps
+
+def loss_sdr(clean,
+             est,
+             masking,
+             eps=2.0**-15):
+    """
+    distortion / signal
+    """
+    err = (clean - est)**2
+    power_s = (clean) **2
+    loss = tf.reduce_sum(masking * (tf.math.log(err+eps) - tf.math.log(power_s+eps)))
+    steps = tf.reduce_sum(masking)
+    ave_loss = loss / steps
+    return ave_loss, steps
+    

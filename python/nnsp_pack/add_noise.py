@@ -17,37 +17,48 @@ def add_noise(data, noise, snr_db, stime, etime,
               snr_dB_improved = None,
               rir = None):
     """Synthesize noise and speech"""
-    pw_data = get_power(data[stime:etime])
-    pw_noise = get_power(noise)
-    snr = 10**(snr_db/10)
-    if pw_data != 0:
-        data = data / np.sqrt(pw_data)
-    if pw_noise != 0 and snr != 0:
-        noise = noise / np.sqrt(pw_noise) / np.sqrt(snr)
+    noise_reverb = 0
     if rir is not None:
         idx_late_reverb = np.minimum(
             np.where(np.abs(rir).max() == rir)[0][0] + 200,
             rir.size-1)
-        rir_e = rir.copy()
-        rir_e[idx_late_reverb:] = 0
-        data_reverb = np.convolve(data, rir,'same')
-        data = np.convolve(data, rir_e, 'same')
-        noise_reverb = data_reverb - data
-        noise = noise + noise_reverb
-    output = data + noise
+        if 0:
+            rir_e = rir.copy()
+            rir_e[idx_late_reverb:] = 0
+            speech_reverb = np.convolve(data, rir,'same')
+            speech = np.convolve(data, rir_e, 'same')
+            noise_reverb = speech_reverb - speech
+            noise = noise + noise_reverb
+            target = speech
+        else:
+            speech_reverb = np.convolve(data, rir, 'same')
+            target = speech_reverb
+    else:
+        target = data.copy()
 
+    pw_target = get_power(target[stime:etime])
+    pw_noise = get_power(noise)
+    snr = 10**(snr_db/10)
+    if pw_target != 0:
+        target = target / np.sqrt(pw_target)
+        noise_reverb = noise_reverb / np.sqrt(pw_target)
+    if pw_noise != 0 and snr != 0:
+        noise = noise / np.sqrt(pw_noise) / np.sqrt(snr)
+    noise = noise + noise_reverb
+
+    output = target + noise
     max_val = np.abs(output).max()
     prob = np.random.uniform(0.05, 0.95, 1)
     gain    = prob / (max_val + 10**-5)
     output  = output * gain
-    data    = data   * gain
+    target  = target * gain
     noise   = noise  * gain
     # if snr_dB_improved:
     #     gain0 = 10**(snr_dB_improved / 20)
     #     data = data + noise / gain0
 
     if return_all:
-        return output, data
+        return output, target
     else:
         return output
 
