@@ -27,22 +27,20 @@ Note that all python scripts described here are all under the folder `nnse/pytho
 ## Dataset
 Before working on training SE model, we need to download the required datasets. Please read on their license agreements carefully in [here](../docs/README.md).
 ## Quick start
-We provided the 3 already trained models. The user can directly try on it. \
+We provided the 2 already trained models. The user can directly try on it. \
 `Small size model:` `~100k` parameters
 ```cmd
   $ python test_se.py --epoch_loaded=62 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
 ```
-`Medium size model:` ~`400k` paramters
-```cmd
-  $ python test_se.py --epoch_loaded=140 --nn_arch='nn_arch/def_se_nn_arch128_pspec.txt' --recording=1  --feat_type='pspec' 
-```
+
 `Large size model:` ~`1.116M` paramters
 ```cmd
-  $ python test_se.py --epoch_loaded=70 --nn_arch='nn_arch/def_se_nn_arch256_pspec.txt' --recording=1  --feat_type='pspec' 
-```
-or
-```cmd
   $ python test_se.py --epoch_loaded=195 --nn_arch='nn_arch/def_se_nn_arch256_pspec_mse.txt' --recording=1  --feat_type='pspec' 
+```
+
+`Large size dereverb model:` ~`1.116M` paramters
+```cmd
+  $ python test_se.py --epoch_loaded=182 --nn_arch='nn_arch/def_se_nn_arch256_pspec_mse_reverb.txt'  --recording=1  --feat_type='pspec' 
 ```
 `Input argruments`:
   * `--nn_arch`: it will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 

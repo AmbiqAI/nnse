@@ -210,7 +210,7 @@ def main(args):
     optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
 
     arch = load_nn_arch(args.nn_arch)
-    neurons, drop_rates, layer_types, activations, num_context, num_dnsampl = arch
+    neurons, drop_rates, layer_types, activations, num_context, num_dnsampl, scalar_output = arch
 
     folder_nn = setup_nn_folder(args.nn_arch)
 
@@ -225,7 +225,7 @@ def main(args):
         nDownSample = num_dnsampl,
         kernel_size = num_context,
         dim_target  = DIM_TARGET,
-        scalar_output = args.scalar_output)
+        scalar_output = scalar_output)
 
     nn_infer = NeuralNetClass(
         neurons     = neurons,
@@ -235,7 +235,7 @@ def main(args):
         nDownSample = num_dnsampl,
         kernel_size = num_context,
         dim_target  = DIM_TARGET,
-        scalar_output = args.scalar_output)
+        scalar_output = scalar_output)
 
     if epoch_loaded == 'random':
         epoch_loaded = -1
@@ -419,7 +419,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch256_pspec_mse_reverb.txt',
+        default='nn_arch/def_se_nn_arch72_mel.txt',
         help='nn architecture')
 
     argparser.add_argument(
@@ -467,13 +467,6 @@ if __name__ == "__main__":
         default =  4 * 10**-4,
         type=float,
         help='learning rate')
-
-    argparser.add_argument(
-        '-so',
-        '--scalar_output',
-        default =  2.0,
-        type=float,
-        help='scalar nn output')
 
     argparser.add_argument(
         '-n',

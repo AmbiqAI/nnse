@@ -22,7 +22,11 @@ def load_nn_arch(filename):
 
     with open(filename, 'r') as file: # pylint: disable=unspecified-encoding
         lines = file.readlines()
-
+    try:
+        scalar_output = nn_search(('scalar_output'), lines, dtype=float)[0]
+    except:
+        scalar_output = 1.0
+    
     size_neurons = nn_search(('layer_neurons', 'num_filters'), lines, dtype=int)
     tmp = nn_search(('input_neurons'), lines, dtype=int)
     size_neurons = tmp + size_neurons
@@ -45,7 +49,7 @@ def load_nn_arch(filename):
     print("Layer types:", layer_types)
     print("Activations:", activations, '\n')
 
-    return size_neurons, dropprobs, layer_types, activations, num_context, num_dnsampl
+    return size_neurons, dropprobs, layer_types, activations, num_context, num_dnsampl, scalar_output
 
 def setup_nn_folder(nn_arch_name):
     """

@@ -30,8 +30,7 @@ class SeClass(NNInferClass):
             quantized=False,
             show_histogram=False,
             np_inference=False,
-            feat_type = 'mel',
-            scalar_output=1):
+            feat_type = 'mel'):
 
         super().__init__(
             nn_arch,
@@ -40,8 +39,7 @@ class SeClass(NNInferClass):
             quantized,
             show_histogram,
             np_inference,
-            feat_type = feat_type,
-            scalar_output=scalar_output)
+            feat_type = feat_type)
 
         self.fbank_mel = np.load('fbank_mel.npy')
 
@@ -144,7 +142,6 @@ def main(args):
             show_histogram  = SHOW_HISTOGRAM,
             np_inference    = NP_INFERENCE,
             feat_type       = args.feat_type,
-            scalar_output   = args.scalar_output
             )
 
     se_inst.blk_proc(data, wavefile=wavefile)
@@ -178,13 +175,6 @@ if __name__ == "__main__":
         '--test_wavefile',
         default = 'test_wavs/i_like_steak.wav',
         help    = 'The wavfile name to be tested')
-
-    argparser.add_argument(
-        '-so',
-        '--scalar_output',
-        default = 2.0,
-        type=float,
-        help='scalar nn output')
 
     argparser.add_argument(
         '-q',

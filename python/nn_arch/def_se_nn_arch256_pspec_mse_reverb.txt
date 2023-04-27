@@ -26,3 +26,5 @@ dropprob 0.25
 layer_type fc
 layer_neurons 257
 activation sigmoid
+
+scalar_output 2.0

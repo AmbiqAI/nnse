@@ -24,8 +24,7 @@ class NNInferClass:
             quantized=False,
             show_histogram=False,
             np_inference=False,
-            feat_type='mel',
-            scalar_output=1):
+            feat_type='mel'):
 
         self.params_audio = params_audio
         self.show_histogram = show_histogram
@@ -33,7 +32,7 @@ class NNInferClass:
         self.feat_type = feat_type
         out = load_nn_arch(nn_arch)
 
-        neurons, _, layer_types, activations, num_context, self.num_dnsampl = out
+        neurons, _, layer_types, activations, num_context, self.num_dnsampl, self.scalar_output = out
 
         folder_nn = setup_nn_folder(nn_arch)
 
@@ -44,7 +43,7 @@ class NNInferClass:
             batchsize   = 1,
             nDownSample = self.num_dnsampl,
             kernel_size = num_context,
-            scalar_output = scalar_output)
+            scalar_output = self.scalar_output)
 
         nn_infer.load_weights(
                 f'{folder_nn}/checkpoints/model_checkpoint_ep{epoch_loaded}' )
