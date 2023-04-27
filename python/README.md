@@ -73,7 +73,7 @@ We provided the 2 already trained models. The user can directly try on it. \
             
 2. Train your model. Type
     ```cmd
-      $ python train_se.py --epoch_loaded='random' --nn_arch='nn_arch/def_se_nn_arch72_mel.txt'
+      $ python train_se.py --epoch_loaded='random' --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --feat_type='mel' 
     ```
     * The argument `--epoch_loaded` represents which epoch of the weight table to be loaded
       - `--epoch_loaded='random'`means you start to train NN from a   randomly initiialized set of weights
