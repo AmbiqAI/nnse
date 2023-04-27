@@ -425,7 +425,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-ft',
         '--feat_type',
-        default='pspec',
+        default='mel',
         help='feature type: \'mel\'or \'pspec\'')
 
     argparser.add_argument(
