@@ -30,7 +30,8 @@ class SeClass(NNInferClass):
             quantized=False,
             show_histogram=False,
             np_inference=False,
-            feat_type = 'mel'):
+            feat_type = 'mel',
+            scalar_output=1):
 
         super().__init__(
             nn_arch,
@@ -39,7 +40,8 @@ class SeClass(NNInferClass):
             quantized,
             show_histogram,
             np_inference,
-            feat_type = feat_type)
+            feat_type = feat_type,
+            scalar_output=scalar_output)
 
         self.fbank_mel = np.load('fbank_mel.npy')
 
@@ -141,7 +143,8 @@ def main(args):
             quantized,
             show_histogram  = SHOW_HISTOGRAM,
             np_inference    = NP_INFERENCE,
-            feat_type       = args.feat_type
+            feat_type       = args.feat_type,
+            scalar_output   = args.scalar_output
             )
 
     se_inst.blk_proc(data, wavefile=wavefile)
@@ -154,7 +157,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch256_pspec.txt',
+        default='nn_arch/def_se_nn_arch256_pspec_mse_reverb.txt',
         help='nn architecture')
 
     argparser.add_argument(
@@ -177,6 +180,13 @@ if __name__ == "__main__":
         help    = 'The wavfile name to be tested')
 
     argparser.add_argument(
+        '-so',
+        '--scalar_output',
+        default = 2.0,
+        type=float,
+        help='scalar nn output')
+
+    argparser.add_argument(
         '-q',
         '--quantized',
         default = True,
@@ -185,7 +195,7 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 125, # 70
+        default= 182, # 70
         help='starting epoch')
 
     main(argparser.parse_args())

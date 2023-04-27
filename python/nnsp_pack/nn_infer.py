@@ -24,7 +24,8 @@ class NNInferClass:
             quantized=False,
             show_histogram=False,
             np_inference=False,
-            feat_type='mel'):
+            feat_type='mel',
+            scalar_output=1):
 
         self.params_audio = params_audio
         self.show_histogram = show_histogram
@@ -42,7 +43,8 @@ class NNInferClass:
             activations = activations,
             batchsize   = 1,
             nDownSample = self.num_dnsampl,
-            kernel_size = num_context)
+            kernel_size = num_context,
+            scalar_output = scalar_output)
 
         nn_infer.load_weights(
                 f'{folder_nn}/checkpoints/model_checkpoint_ep{epoch_loaded}' )
@@ -165,8 +167,9 @@ class NNInferClass:
         self.feats = np.concatenate((self.feats, np.expand_dims(feat, axis=0)), axis=0)
         return feat, spec
 
-    def frame_proc_tf(self, data,
-                    return_all=False):
+    def frame_proc_tf(
+            self, data,
+            return_all=False):
         """
         NN frame process using tensorflow
         """
@@ -175,7 +178,11 @@ class NNInferClass:
 
         if self.count_run == 0:
 
-            est, self.states = self.nn_infer(feats_expand, 1.0, self.states, training=False)
+            est, self.states = self.nn_infer(
+                feats_expand,
+                1.0,
+                self.states,
+                training=False)
             est = est[0,0].numpy()
             self.post_nn_infer(est)
         if return_all:

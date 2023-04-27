@@ -22,11 +22,11 @@ def add_noise(data, noise, snr_db, stime, etime,
         idx_late_reverb = np.minimum(
             np.where(np.abs(rir).max() == rir)[0][0] + 200,
             rir.size-1)
-        if 0:
-            rir_e = rir.copy()
-            rir_e[idx_late_reverb:] = 0
+        if 1:
+            rir_early = rir.copy()
+            rir_early[idx_late_reverb:] = 0
             speech_reverb = np.convolve(data, rir,'same')
-            speech = np.convolve(data, rir_e, 'same')
+            speech = np.convolve(data, rir_early, 'same')
             noise_reverb = speech_reverb - speech
             noise = noise + noise_reverb
             target = speech

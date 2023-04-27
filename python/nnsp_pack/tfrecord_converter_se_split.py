@@ -113,9 +113,6 @@ def tfrecords_pipeline(
     dataset = tf.data.Dataset.from_tensor_slices(filenames)
     if is_shuffle:
         dataset = dataset.shuffle(len(filenames), reshuffle_each_iteration=True)
-    # dataset = dataset.batch(
-    #                 batchsize,
-    #                 drop_remainder=True)
     dataset = dataset.interleave(
                 map_func           = tfrecord_convert,
                 cycle_length       = batchsize,
@@ -124,7 +121,7 @@ def tfrecords_pipeline(
                 num_parallel_calls = 5)
     dataset = dataset.map(
                 mapping,
-                num_parallel_calls = 3,
+                num_parallel_calls = tf.data.AUTOTUNE,
                 deterministic = True)
     dataset = dataset.batch(
                     batchsize,
@@ -140,8 +137,8 @@ def main():
     """
     folder = 'tfrecord'
     os.makedirs(folder, exist_ok=True)
-    num_data = 53
-
+    num_data = 50
+    batchsize = 10
     # generate tfrecords
     fnames = []
     for i in range(num_data):
@@ -170,19 +167,20 @@ def main():
         fnames += [fname]
     _, dataset = tfrecords_pipeline(
                     fnames,
-                    batchsize = 10,
+                    batchsize = batchsize,
                     is_shuffle=True)
 
     for epoch in range(2):
+        batch_id = 0
         for batch, data  in enumerate(dataset):
             pspec_sn, _, pspec_s, _ = data
-            if batch in range(10):
-                print(f"Epoch {epoch}, Batch {batch}")
-                print('pspec_sn shape:', pspec_sn.shape)
-                print('pspec_s shape:', pspec_s.shape)
-                for i in range(5):
-                    print(pspec_sn[i][0,0:5])
-                print("")
-
+            print(f"Epoch {epoch}, Batch {batch_id}")
+            print('pspec_sn shape:', pspec_sn.shape)
+            print('pspec_s shape:', pspec_s.shape)
+            for i in range(batchsize):
+                print(pspec_sn[i][0,0:5])
+            print("")
+            if batch % NUM_SPLIT_EXAMPLE == NUM_SPLIT_EXAMPLE-1:
+                batch_id += 1
 if __name__ == "__main__":
     main()

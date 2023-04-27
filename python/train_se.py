@@ -62,8 +62,8 @@ def train_kernel(
         #             amp_sn * est,
         #             mask)
         ave_loss, steps = loss_mse(
-                (amp_s),        # clean
-                (amp_sn * est), # noisy * mask
+                amp_s,        # clean
+                amp_sn * est, # noisy * mask
                 masking = mask)
 
     if training:
@@ -224,7 +224,8 @@ def main(args):
         batchsize   = batchsize,
         nDownSample = num_dnsampl,
         kernel_size = num_context,
-        dim_target  = DIM_TARGET)
+        dim_target  = DIM_TARGET,
+        scalar_output = args.scalar_output)
 
     nn_infer = NeuralNetClass(
         neurons     = neurons,
@@ -233,7 +234,8 @@ def main(args):
         batchsize   = batchsize,
         nDownSample = num_dnsampl,
         kernel_size = num_context,
-        dim_target  = DIM_TARGET)
+        dim_target  = DIM_TARGET,
+        scalar_output = args.scalar_output)
 
     if epoch_loaded == 'random':
         epoch_loaded = -1
@@ -417,7 +419,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch256_pspec_mse.txt',
+        default='nn_arch/def_se_nn_arch256_pspec_mse_reverb.txt',
         help='nn architecture')
 
     argparser.add_argument(
@@ -462,9 +464,16 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-l',
         '--learning_rate',
-        default = 4 * 10**-4,
+        default =  4 * 10**-4,
         type=float,
         help='learning rate')
+
+    argparser.add_argument(
+        '-so',
+        '--scalar_output',
+        default =  2.0,
+        type=float,
+        help='scalar nn output')
 
     argparser.add_argument(
         '-n',
@@ -476,7 +485,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default='random',
+        default="random",
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \

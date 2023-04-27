@@ -20,7 +20,8 @@ class NeuralNetClass(tf.keras.Model):
                  neurons                = [10] * 10,
                  dropRates              = [0] * 10,
                  dropRates_recurrent    = [0] * 10,
-                 dim_target = 7):
+                 dim_target = 7,
+                 scalar_output = 1.0):
 
         super(NeuralNetClass, self).__init__()
         self.kernel_size = kernel_size
@@ -44,13 +45,12 @@ class NeuralNetClass(tf.keras.Model):
                         'bias'  : [None] * self.num_layers }
         self.h_states = [None] * len(self.layer_types)
         self.c_states = [None] * len(self.layer_types)
-
+        self.scalar_output = scalar_output
 
         for i in range(self.num_layers):
             self.nfracs['kernel'][i] =  tf.Variable(12, dtype = tf.float32, trainable = False)
             self.nfracs['bias'][i] =  tf.Variable(12, dtype = tf.float32, trainable = False)
         for i, neuron in enumerate(neurons[1:]):
-
             layer_type = layer_types[i]
             kernel_initializer = self.weight_initializer(
                                         neurons[i],
@@ -141,7 +141,7 @@ class NeuralNetClass(tf.keras.Model):
                 out = layer(out, training=training)
         states = (self.h_states, self.c_states)
         out *= mask
-
+        out *= self.scalar_output
         self.update_limited_quantizated(quantized)
         return out, states
 
@@ -187,6 +187,7 @@ class NeuralNetClass(tf.keras.Model):
         """
         Copy weight table from one net to the other.
         """
+        nn_duplx.scalar_output = self.scalar_output
         nn_duplx.layer_types = self.layer_types.copy()
         nn_duplx.activaitons = self.activaitons.copy()
         nn_duplx.neurons = self.neurons.copy()

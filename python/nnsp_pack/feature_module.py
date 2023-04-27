@@ -24,7 +24,9 @@ def my_colorbar(ax_handle, im=None):
 
 def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
                      pcm_s_, spec_s_, melspec_db_s_,
-                     sample_rate, label_frame=None):
+                     sample_rate,
+                     label_frame=None,
+                     xlim=None):
     """
     Display stft for s and s+n
     """
@@ -66,7 +68,8 @@ def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
         ax_handle.set_ylim([0, sample_rate >> 1])
         my_colorbar(ax_handle, im)
         ax_handle.text(0.2, 0.2, text)
-
+        if xlim:
+            ax_handle.set_xlim(xlim)
     # Draw the mel spec
     melspecs_db = [melspec_db_sn, melspec_db_s]
     texts = ['melspec (s+n)', 'melspec (s)']
@@ -89,7 +92,8 @@ def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
         ax_handle.text(0.2, 0.2, text)
         if label_frame is not None:
             ax_handle.plot(label_frame * 20)
-
+        if xlim:
+            ax_handle.set_xlim(xlim)
     # Draw the time seq
     pcms_sn = [pcm_sn, pcm_s]
     texts = ['melspec (s+n)', 'melspec (s)']
@@ -144,7 +148,7 @@ def display_stft_tfmask(
     ax_handle.set_ylim([0, sample_rate >> 1])
     my_colorbar(ax_handle, im)
     ax_handle.text(0.2, 0.2, 'spec')
-
+    
     # Draw the mel spec
     ax_handle = plt.subplot(4,1,2)
     len_feat, len0 = melspec_db.shape
@@ -175,7 +179,7 @@ def display_stft_tfmask(
             cmap    = 'pink_r',
             aspect  = 'auto',
             vmin    = 0,
-            vmax    = 1,
+            vmax    = tfmask.max(),
             extent  = [0 , ax_fr.max(), 0 , len_feat])
 
     ax_handle.set_ylim([0, len_feat])

@@ -29,7 +29,19 @@ if UPLOAD_TFRECORD_S3:
     print('uploading tfrecords to s3 will slow down the process')
 S3_BUCKET = "ambiqai-speech-commands-dataset"
 S3_PREFIX = "tfrecords"
+if DEBUG:
+    SNR_DBS = [1000]
+else:
+    SNR_DBS = [-9, -6, -3, 0, 3, 6, 9, 12, 15, 30]
 
+NTYPES = [
+    'ESC-50-MASTER',
+    'wham_noise',
+    # "social_noise",
+    'FSD50K',
+    'musan',
+    # 'traffic'
+]
 params_audio = {
     'win_size'      : 480,
     'hop'           : 160,
@@ -213,7 +225,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
                 if reverbing:
                     print('has reverb')
                 sd.play(
-                    audio_sn,
+                    audio_s,
                     self.feat_inst.sample_rate)
                 print(fnames[2*i])
                 print(fnames[2*i + 1])
@@ -225,7 +237,9 @@ class FeatMultiProcsClass(multiprocessing.Process):
                     flabel[start_frame: end_frame] = target
                 display_stft_all(audio_sn, spec_sn.T, feat_sn.T,
                                  audio_s,  spec_s.T,  feat_s.T,
-                                 self.feat_inst.sample_rate, label_frame=flabel)
+                                 self.feat_inst.sample_rate,
+                                 label_frame=flabel,
+                                 xlim=[0,300])
                 os.makedirs('test_wavs', exist_ok=True)
                 sf.write(f'test_wavs/speech_{self.cnt}.wav', audio_sn, self.feat_inst.sample_rate)
                 sf.write(f'test_wavs/speech_{self.cnt}_ref.wav', speech, self.feat_inst.sample_rate)
@@ -282,19 +296,7 @@ def main(args):
         wandb.config.update(args)
 
     sets_categories = ['train', 'test']
-    if DEBUG:
-        snr_dbs = [20]
-    else:    
-        snr_dbs = [-9, -6, -3, 0, 3, 6, 9, 12, 24]
 
-    ntypes = [
-        'ESC-50-MASTER',
-        'wham_noise',
-        # "social_noise",
-        'FSD50K',
-        'musan',
-        # 'traffic'
-    ]
     if REVERB:
         tmp = add_noise.get_noise_files_new("rirs_noises/RIRS_NOISES/simulated_rirs")
         random.shuffle(tmp)
@@ -306,7 +308,7 @@ def main(args):
         lst_reverb = None
     # Prepare noise dataset, train and test sets
     os.makedirs('data/noise_list', exist_ok=True)
-    for ntype in ntypes:
+    for ntype in NTYPES:
         if ntype=='wham_noise':
             for set0 in ['train', 'test']:
                 noise_files_lst = f'data/noise_list/{set0}_noiselist_{ntype}.csv'
@@ -408,10 +410,10 @@ def main(args):
             else:
                 sub_src += [filepaths[idx0:blk_size+idx0]]
 
-        for ntype in ntypes:
+        for ntype in NTYPES:
             manager = multiprocessing.Manager()
             success_dict = manager.dict({i: [] for i in range(args.num_procs)})
-            print(f'{train_set} set running: snr_dB = {snr_dbs[0]}--{snr_dbs[-1]}, ntype={ntype}')
+            print(f'{train_set} set running: snr_dB = {SNR_DBS[0]}--{SNR_DBS[-1]}, ntype={ntype}')
             ntype0 = re.sub(r'/', '_', ntype)
             noise_files_train = f'data/noise_list/train_noiselist_{ntype0}.csv'
             noise_files_test = f'data/noise_list/test_noiselist_{ntype0}.csv'
@@ -433,7 +435,7 @@ def main(args):
                         train_set,
                         ntype,
                         noise_files,
-                        snr_dbs,
+                        SNR_DBS,
                         success_dict,
                         params_audio_def = params_audio,
                         num_procs = args.num_procs,
@@ -489,7 +491,7 @@ if __name__ == "__main__":
         '-rb',
         '--reverb_prob',
         type    = float,
-        default = 0.25,
+        default = 0.5,
         help    = 'percentage of size for reverb dataset')
 
     argparser.add_argument(
@@ -507,7 +509,7 @@ if __name__ == "__main__":
         '-s',
         '--datasize_noise',
         type    = int,
-        default = 10000,
+        default = 30000,
         help='How many speech samples per noise')
 
     argparser.add_argument(
