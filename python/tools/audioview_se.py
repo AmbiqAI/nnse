@@ -14,24 +14,26 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import scipy.io.wavfile as wavfile
+import pyaudio
 # Define the RPC service handlers - one for each EVB-to-PC RPC function
 
 FRAMES_TO_SHOW  = 500
 SAMPLING_RATE   = 16000
 HOP_SIZE        = 160
+PLAY_AUDIO      = True
 
 class DataServiceClass:
     """
     Capture Audio data: EVB->PC
     """
-    def __init__(self, databuf, wavout, lock, is_record, cyc_count):
+    def __init__(self, databuf, wavout, lock, is_record, cyc_count, ch_select, playback=False):
         self.cyc_count      = cyc_count
         self.wavefile       = None
         self.wavename       = wavout
         self.databuf        = databuf
         self.lock           = lock
         self.is_record      = is_record
-
+        self.ch_select      = ch_select
     def wavefile_init(self, wavename):
         """
         wavefile initialization
@@ -64,6 +66,10 @@ class DataServiceClass:
 
                 self.wavefile = None
                 print('Stop recording')
+
+                if PLAY_AUDIO:
+                    self.stream.close()
+                    self.pau.terminate()
         else:
             # The data 'block' (in C) is defined below:
             # static char msg_store[30] = "Audio16bPCM_to_WAV";
@@ -91,6 +97,13 @@ class DataServiceClass:
 
                 self.wavefile = self.wavefile_init(self.wavename)
 
+                if PLAY_AUDIO:
+                    self.pau = pyaudio.PyAudio()
+                    self.stream = self.pau.open(format = self.pau.get_format_from_width(2),
+                    channels = 1,
+                    rate = 16000,
+                    output = True)
+
             if (pcmBlock.cmd == GenericDataOperations_EvbToPc.common.command.write_cmd) \
                      and (pcmBlock.description == "Audio16bPCM_to_WAV"):
 
@@ -98,12 +111,16 @@ class DataServiceClass:
                 data = np.frombuffer(pcmBlock.buffer, dtype=np.int16).copy()
                 self.lock.release()
 
-                data = data.reshape((2, HOP_SIZE)).T.flatten()
-                self.wavefile.writeframesraw(data.tobytes())
-
+                data_flatten = data.reshape((2, HOP_SIZE)).copy().T.flatten()
+                self.wavefile.writeframesraw(data_flatten.tobytes())
+                if PLAY_AUDIO:
+                    self.lock.acquire()
+                    ch = self.ch_select[0]
+                    self.lock.release()
+                    self.stream.write(data_flatten[ch::2].copy().tobytes()) # take the second channel data to play
                 # Data is a 16 bit PCM sample
                 self.lock.acquire()
-                fdata = np.frombuffer(pcmBlock.buffer, dtype=np.int16).copy() / 32768.0
+                fdata = data / 32768.0
                 self.lock.release()
 
                 start = cyc_count * HOP_SIZE
@@ -158,12 +175,13 @@ class VisualDataClass:
     """
     Visual the audio data from EVB
     """
-    def __init__(self, databuf, lock, is_record, event_stop, cyc_count):
+    def __init__(self, databuf, lock, is_record, event_stop, cyc_count, ch_select):
         self.databuf = databuf
         self.lock    = lock
         self.is_record = is_record
         self.event_stop = event_stop
         self.cyc_count = cyc_count
+        self.ch_select = ch_select
         secs2show = FRAMES_TO_SHOW * HOP_SIZE/SAMPLING_RATE
         self.xdata = np.arange(FRAMES_TO_SHOW * HOP_SIZE) / SAMPLING_RATE
         self.fig, self.ax_handle = plt.subplots()
@@ -208,6 +226,19 @@ class VisualDataClass:
                             [0.5, 0.15, 0.14, 0.075],
                             'record',
                             self.callback_recordstart)
+
+        self.button_enhance = make_button(
+                            [0.75, 0.05, 0.05, 0.075],
+                            'E',
+                            self.callback_enhance)
+
+        self.button_raw = make_button(
+                            [0.81, 0.05, 0.05, 0.075],
+                            'R',
+                            self.callback_raw)
+        
+        self.text_info = plt.text(1.2,0.4, "enhance")
+        self.text_info.set_text("enhance")
         plt.show()
 
     def handle_close(self, event): # pylint: disable=unused-argument
@@ -231,6 +262,28 @@ class VisualDataClass:
         if event.inaxes is not None:
             event.inaxes.figure.canvas.draw_idle()
 
+    def callback_enhance(self, event):
+        """
+        for enhance button
+        """
+        self.lock.acquire()
+        self.ch_select[0] = 1
+        self.lock.release()
+        self.text_info.set_text("enhance")
+        if event.inaxes is not None:
+            event.inaxes.figure.canvas.draw_idle()
+
+    def callback_raw(self, event):
+        """
+        for raw button
+        """
+        self.lock.acquire()
+        self.ch_select[0] = 0
+        self.lock.release()
+        self.text_info.set_text("raw")
+        if event.inaxes is not None:
+            event.inaxes.figure.canvas.draw_idle()
+    
     def callback_recordstart(self, event):
         """
         for record button
@@ -261,18 +314,18 @@ class VisualDataClass:
         if event.inaxes is not None:
             event.inaxes.figure.canvas.draw_idle()
 
-def target_proc_draw(databuf, lock, recording, event_stop, cyc_count):
+def target_proc_draw(databuf, lock, recording, event_stop, cyc_count, ch_select):
     """
     one of multiprocesses: draw
     """
-    VisualDataClass(databuf, lock, recording, event_stop, cyc_count)
+    VisualDataClass(databuf, lock, recording, event_stop, cyc_count, ch_select)
 
-def target_proc_evb2pc(tty, baud, databuf, wavout, lock, is_record, cyc_count):
+def target_proc_evb2pc(tty, baud, databuf, wavout, lock, is_record, cyc_count, ch_select, playback=False):
     """
     one of multiprocesses: EVB sends data to PC
     """
     transport_evb2pc = erpc.transport.SerialTransport(tty, int(baud))
-    handler = DataServiceClass(databuf, wavout, lock, is_record, cyc_count)
+    handler = DataServiceClass(databuf, wavout, lock, is_record, cyc_count, ch_select, playback)
     service = GenericDataOperations_EvbToPc.server.evb_to_pcService(handler)
     server = erpc.simple_server.SimpleServer(transport_evb2pc, erpc.basic_codec.BasicCodec)
     server.add_service(service)
@@ -284,17 +337,22 @@ def main(args):
     """
     main
     """
+    print(f"To playback: {args.playback}")
     event_stop = multiprocessing.Event()
     lock = Lock()
     databuf = Array('d', FRAMES_TO_SHOW * HOP_SIZE)
     record_ind = Array('i', [0]) # is_record indicator. 'No record' as initialization
     cyc_count = Array('i', [0])
+
+    # choose the channel to playback
+    ch_select = Array('i', [1]) # 0: raw data, 1: enhanced data
+
     # we use two multiprocesses to handle real-time visualization and recording
     # 1. proc_draw   : to visualize
     # 2. proc_evb2pc : to capture data from evb and recording
     proc_draw   = Process(
                     target = target_proc_draw,
-                    args   = (databuf,lock, record_ind, event_stop, cyc_count))
+                    args   = (databuf,lock, record_ind, event_stop, cyc_count, ch_select))
     proc_evb2pc = Process(
                     target = target_proc_evb2pc,
                     args   = (  args.tty,
@@ -303,7 +361,9 @@ def main(args):
                                 args.out,
                                 lock,
                                 record_ind,
-                                cyc_count))
+                                cyc_count,
+                                ch_select,
+                                args.playback))
     proc_draw.start()
     proc_evb2pc.start()
     # monitor if program should be terminated
@@ -326,12 +386,22 @@ if __name__ == "__main__":
         default = "/dev/tty.usbmodem1234561", # "/dev/tty.usbmodem1234561"
         help    = "Serial device (default value is None)",
     )
+
+    argParser.add_argument(
+        "-pb",
+        "--playback",
+        default =False,
+        type    =bool,
+        help    = "playback the data",
+    )
+
     argParser.add_argument(
         "-B",
         "--baud",
         default = "115200",
         help    = "Baud (default value is 115200)"
     )
+
     argParser.add_argument(
         "-o",
         "--out",
