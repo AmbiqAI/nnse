@@ -337,6 +337,7 @@ def main(args):
     """
     main
     """
+    print(f"To playback: {args.playback}")
     event_stop = multiprocessing.Event()
     lock = Lock()
     databuf = Array('d', FRAMES_TO_SHOW * HOP_SIZE)
