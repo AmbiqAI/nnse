@@ -19,7 +19,9 @@ def cross_entropy(target,       # trget
 
 def deepfiltering(
         amp_sn,
-        tfmask):
+        tfmask,
+        len_filter=1,
+        len_lookahead = 0):
     """Deep filtering
     shape = (batchsize, timesteps, dim_feat)
 
@@ -27,19 +29,32 @@ def deepfiltering(
         amp_sn (tf.float32): amplitude of noisy signal
         tfmask (tf.float32): estimated tfmask
     """
-    eps = 2**-15
     batchsize, steps, dim_feat = tfmask.shape
-    shape = (batchsize,steps, 4, dim_feat >> 2)
-    tfmask = tf.reshape(tfmask, shape)
-    amp_extend=[]
-    pad = tf.ones((batchsize, 3, dim_feat >> 2), dtype = np.float32) * eps
-    pad_amp = tf.concat([pad, tf.identity(amp_sn)], axis=-2)
-    for i in range(4):
-        amp_extend +=[tf.identity(pad_amp[:,i:i+steps,:])]
-    amp_extend = tf.stack(amp_extend,-2)
-    estimation = tf.reduce_mean(amp_extend * tfmask, axis=-2)
-    ave_mask = tf.reduce_mean(tfmask, axis=-2)
-
+    if len_filter==1:
+        estimation = amp_sn * tfmask
+        ave_mask = tfmask
+    else:
+        eps = 2**-15
+        len_filter_causal = len_filter - len_lookahead
+        dim_target = int(dim_feat / len_filter)
+        shape = (batchsize,steps, len_filter, dim_target)
+        tfmask = tf.reshape(tfmask, shape)
+        amp_extend=[]
+        pad_front = tf.ones(
+            (batchsize, len_filter_causal-1, dim_target),
+            dtype = np.float32) * eps
+        pad_back = tf.ones(
+            (batchsize, len_lookahead, dim_target),
+            dtype = np.float32) * eps
+        pad_amp = tf.concat(
+                    [pad_front, tf.identity(amp_sn), pad_back],
+                    axis=-2)
+        for i in range(len_filter):
+            amp_extend +=[tf.identity(pad_amp[:,i:i+steps,:])]
+        amp_extend = tf.stack(amp_extend,-2)
+        estimation = tf.reduce_sum(amp_extend * tfmask, axis=-2)
+        ave_mask = tf.reduce_mean(tfmask, axis=-2)
+   
     return estimation, ave_mask
 
 def deepfiltering_np(

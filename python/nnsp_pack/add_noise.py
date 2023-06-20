@@ -7,6 +7,8 @@ import logging
 import soundfile as sf
 import numpy as np
 import librosa
+import sounddevice as sd
+import matplotlib.pyplot as plt
 
 def get_power(data):
     """Calculate power of data"""
@@ -19,20 +21,23 @@ def add_noise(data, noise, snr_db, stime, etime,
     """Synthesize noise and speech"""
     noise_reverb = 0
     if rir is not None:
+        samples_5ms = 16000 * 0.005
         idx_late_reverb = np.minimum(
-            np.where(np.abs(rir).max() == rir)[0][0] + 200,
-            rir.size-1)
-        if 1:
-            rir_early = rir.copy()
-            rir_early[idx_late_reverb:] = 0
-            speech_reverb = np.convolve(data, rir,'same')
-            speech = np.convolve(data, rir_early, 'same')
-            noise_reverb = speech_reverb - speech
-            noise = noise + noise_reverb
-            target = speech
-        else:
-            speech_reverb = np.convolve(data, rir, 'same')
-            target = speech_reverb
+            np.where(np.abs(rir).max() == rir)[0][0] + samples_5ms,
+            rir.size-1).astype(np.int64)
+        rt60 = 2
+        dt = 1 / 16000
+        rt60_level = 10.0**(-60.0 / 20.0)
+        tau = -rt60 / np.log10(rt60_level)
+        n = np.arange(rir.size)
+        decay = 10 ** (-(n-idx_late_reverb) * dt / tau)
+        decay[:idx_late_reverb] = 1
+        rir_target = decay * rir
+        speech_reverb = np.convolve(data, rir,'same')
+        target = np.convolve(data, rir_target, 'same')
+        noise_reverb = speech_reverb - target
+        noise = noise + noise_reverb
+
     else:
         target = data.copy()
 

@@ -32,8 +32,7 @@ class NNInferClass:
         self.feat_type = feat_type
         out = load_nn_arch(nn_arch)
 
-        neurons, _, layer_types, activations, num_context, self.num_dnsampl, self.scalar_output = out
-
+        neurons, _, layer_types, activations, num_context, self.num_dnsampl, self.scalar_output, self.len_filter, self.len_lookahead = out
         folder_nn = setup_nn_folder(nn_arch)
 
         nn_infer = NeuralNetClass(

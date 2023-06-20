@@ -77,7 +77,7 @@ def tf2np(net_tf, quantized = False):
             if nn_type == 'fc':
                 kernel = kernel_f
 
-            elif nn_type == 'conv1d':
+            elif nn_type in {'conv1d', 'conv2d'}:
                 shape = kernel_f.shape # (6, dim_feat, 1, neurons)
                 size_conv1d = shape[0]
                 kernel = np.transpose(kernel_f[:,:,0,:], (2,0,1))

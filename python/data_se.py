@@ -21,7 +21,7 @@ from nnsp_pack import add_noise
 from nnsp_pack import boto3_op
 from nnsp_pack.se_download import se_download
 
-DEBUG = False
+DEBUG = True
 UPLOAD_TFRECORD_S3 = False
 DOWLOAD_DATA = False
 REVERB = True
@@ -30,16 +30,16 @@ if UPLOAD_TFRECORD_S3:
 S3_BUCKET = "ambiqai-speech-commands-dataset"
 S3_PREFIX = "tfrecords"
 if DEBUG:
-    SNR_DBS = [1000]
+    SNR_DBS = [6]
 else:
-    SNR_DBS = [-9, -6, -3, 0, 3, 6, 9, 12, 15, 30]
+    SNR_DBS = [-6, -3, 0, 3, 6, 9, 12, 15, 30]
 
 NTYPES = [
-    'ESC-50-MASTER',
-    'wham_noise',
-    # "social_noise",
-    'FSD50K',
-    'musan',
+    # 'ESC-50-MASTER',
+    # 'wham_noise',
+    "social_noise",
+    # 'FSD50K',
+    # 'musan',
     # 'traffic'
 ]
 params_audio = {
@@ -47,7 +47,7 @@ params_audio = {
     'hop'           : 160,
     'len_fft'       : 512,
     'sample_rate'   : 16000,
-    'nfilters_mel'  : 72 }
+    'nfilters_mel'  : 36 }
 
 def download_data():
     """
@@ -225,7 +225,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
                 if reverbing:
                     print('has reverb')
                 sd.play(
-                    audio_s,
+                    audio_sn,
                     self.feat_inst.sample_rate)
                 print(fnames[2*i])
                 print(fnames[2*i + 1])
@@ -238,8 +238,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
                 display_stft_all(audio_sn, spec_sn.T, feat_sn.T,
                                  audio_s,  spec_s.T,  feat_s.T,
                                  self.feat_inst.sample_rate,
-                                 label_frame=flabel,
-                                 xlim=[0,300])
+                                 label_frame=flabel)
                 os.makedirs('test_wavs', exist_ok=True)
                 sf.write(f'test_wavs/speech_{self.cnt}.wav', audio_sn, self.feat_inst.sample_rate)
                 sf.write(f'test_wavs/speech_{self.cnt}_ref.wav', speech, self.feat_inst.sample_rate)
@@ -491,7 +490,7 @@ if __name__ == "__main__":
         '-rb',
         '--reverb_prob',
         type    = float,
-        default = 0.5,
+        default = 0,
         help    = 'percentage of size for reverb dataset')
 
     argparser.add_argument(

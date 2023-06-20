@@ -70,11 +70,22 @@ class NeuralNetClass(tf.keras.Model):
                         kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer),
                         input_shape = (None, neurons[i], 1)) # (time, dim_feat, ch)
 
+            elif layer_type == 'conv2d':
+                layer = layers.Conv2D(
+                        neuron,
+                        (kernel_size, kernel_size),
+                        padding     = 'valid',
+                        strides     = (self.nDownSample, 1), # downsampling 2 in timesteps dim
+                        activation  = activations[i],
+                        kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer),
+                        input_shape = (None, neurons[i], 1)) # (time, dim_feat, ch)
+
             elif layer_type == 'fc':
                 layer = layers.Dense(
                         neuron,
                         activation = activations[i],
-                        kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer))
+                        # kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer)
+                        )
 
             elif layer_type == 'lstm':
                 layer = layers.LSTM(
@@ -129,6 +140,11 @@ class NeuralNetClass(tf.keras.Model):
                 out = tf.expand_dims(out,3)
                 out = layer(out, training = training) # (batches, timesteps, 1, neurons[1])
                 out = out[:, :, 0, :]
+            elif self.layer_types[i] == 'conv2d':
+                out = tf.expand_dims(out,3)
+                out = layer(out, training = training) # (batches, timesteps, dim_feat, num_filters)
+                shape = out.shape
+                out = tf.reshape(out, [shape[0], shape[1],-1])
             elif self.layer_types[i] == 'lstm':
                 out, h_state, c_state = layer(
                                 out,

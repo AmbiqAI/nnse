@@ -68,11 +68,14 @@ class SeClass(NNInferClass):
         tfmasks =[]
         stft_inst = stft_class()
         stft_inst.reset()
-
+        data_frame = np.ones((160,),dtype=np.float64) * 2**-15
+        data_freq = stft_inst.stft_frame_proc(data_frame)
+        data_freq_stack = [data_freq.copy() for i in range(self.len_filter)]
         for i in range(bks):
             data_frame = data[i*params_audio['hop'] : (i+1) * params_audio['hop']]
             data_freq = stft_inst.stft_frame_proc(data_frame)
-
+            data_freq_stack.pop(0)
+            data_freq_stack += [data_freq]
             if NP_INFERENCE:
                 feat, spec, est = self.frame_proc_np(data_frame, return_all = True)
             else:
@@ -83,9 +86,10 @@ class SeClass(NNInferClass):
             self.count_run = (self.count_run + 1) % self.num_dnsampl
             print(f"\rprocessing frame {i}", end='')
             out = stft_inst.istft_frame_proc(
-                    data_freq,
-                    tfmask = est,
-                    min_tfmask = 0)
+                    data_freq_stack,
+                    tfmask          = est,
+                    min_tfmask      = 0,
+                    len_lookahead   = self.len_lookahead)
             out = np.array([data_frame, out]).T.flatten()
             out = np.floor(out * 2**15).astype(np.int16)
             file.writeframes(out.tobytes())
@@ -95,6 +99,12 @@ class SeClass(NNInferClass):
         specs   = np.array(specs)
 
         fig_name = re.sub(r'\.wav', '.pdf', fname)
+
+        # if self.len_filter != 1:
+        #     steps, dim_out = tfmasks.shape
+        #     dim = int(dim_out / self.len_filter)
+        #     tfmasks = tfmasks[:,-dim*(self.len_lookahead+1):-dim*self.len_lookahead]
+
         display_stft_tfmask(
             data,
             specs.T,
@@ -102,6 +112,7 @@ class SeClass(NNInferClass):
             tfmasks.T,
             sample_rate=params_audio['sample_rate'],
             print_name=f"{result_folder}/output_{fig_name}")
+
         file.close()
 
         data, samplerate = sf.read(f"{result_folder}/output_{fname}")
@@ -154,7 +165,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch256_pspec_mse_reverb.txt',
+        default='nn_arch/def_se_nn_arch256_pspec_mse_reverb_conv1_df4_ahead_new.txt',
         help='nn architecture')
 
     argparser.add_argument(
@@ -173,7 +184,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-v',
         '--test_wavefile',
-        default = 'test_wavs/i_like_steak.wav',
+        default = 'test_wavs/keyboard_steak.wav',
         help    = 'The wavfile name to be tested')
 
     argparser.add_argument(
@@ -185,7 +196,7 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 182, # 70
+        default= 73, # 70
         help='starting epoch')
 
     main(argparser.parse_args())

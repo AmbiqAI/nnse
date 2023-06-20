@@ -1,2 +1,2 @@
-model_checkpoint_path: "model_checkpoint_ep199"
-all_model_checkpoint_paths: "model_checkpoint_ep199"
+model_checkpoint_path: "model_checkpoint_ep79"
+all_model_checkpoint_paths: "model_checkpoint_ep79"

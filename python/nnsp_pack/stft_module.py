@@ -42,17 +42,35 @@ class stft_class: # pylint: disable=invalid-name
             self,
             data_freq,
             tfmask = 1.0,
-            min_tfmask = 0.0):
+            min_tfmask = 0.0,
+            len_lookahead = 0):
         """
         istft_frame_proc
         """
-        data_freq = data_freq * np.maximum(tfmask, min_tfmask)
-        data = np.fft.irfft(data_freq)[:self.winsize]
-        wdata = data * self.win
-        self.obuf += wdata
-        odata = self.obuf[:self.hop].copy()
-        self.obuf[:self.overlap_size] = self.obuf[self.hop:]
-        self.obuf[self.overlap_size:] = 0
+        len_filter=len(data_freq)
+        data_freq = np.array(data_freq)
+        if len(data_freq) == 1:
+            data_freq = data_freq* np.maximum(tfmask, min_tfmask)
+            data = np.fft.irfft(data_freq)[:self.winsize]
+            wdata = data * self.win
+            self.obuf += wdata
+            odata = self.obuf[:self.hop].copy()
+            self.obuf[:self.overlap_size] = self.obuf[self.hop:]
+            self.obuf[self.overlap_size:] = 0
+        else:
+            data_freq0 = data_freq[-(len_lookahead+1)].copy()
+            tfmask = np.reshape(tfmask,(len_filter,-1))
+            amp_data_freqs = np.abs(data_freq)
+            ave_amp = np.sum(
+                amp_data_freqs * np.maximum(tfmask, min_tfmask),
+                axis=0)
+            phase = data_freq0 / (np.abs(data_freq0))
+            data = np.fft.irfft(ave_amp * phase)[:self.winsize]
+            wdata = data * self.win
+            self.obuf += wdata
+            odata = self.obuf[:self.hop].copy()
+            self.obuf[:self.overlap_size] = self.obuf[self.hop:]
+            self.obuf[self.overlap_size:] = 0
         return odata
 
 def main():
