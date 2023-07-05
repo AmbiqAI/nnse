@@ -8,14 +8,15 @@ import argparse
 import pickle
 import tensorflow as tf
 import numpy as np
+import random
 import matplotlib.pyplot as plt
 from nnsp_pack.nn_module import NeuralNetClass, lstm_states, tf_round
 from nnsp_pack.tfrecord_converter_se_split import tfrecords_pipeline
-from nnsp_pack.loss_functions import loss_mse, loss_sdr, deepfiltering
+from nnsp_pack.loss_functions import loss_mse
 from nnsp_pack.converter_fix_point import fakefix_tf
 from nnsp_pack.calculate_feat_stats_se_split import feat_stats_estimator
 from nnsp_pack.load_nn_arch import load_nn_arch, setup_nn_folder
-from nnsp_pack.tf_basic_math import tf_log10_eps, tf_power_eps
+from nnsp_pack.tf_basic_math import tf_log10_eps
 import c_code_table_converter
 
 SHOW_STEPS          = False
@@ -34,25 +35,6 @@ MEL_FBANKS = tf.Variable(
     np.load('fbank_mel.npy').T,
     dtype       = tf.float32,
     trainable   = False)
-
-def atan(
-    inputs: tf.float32,
-    param:  tf.float32 = 0.15) -> tf.float32:
-    """_summary_
-    Args:
-        inputs (tf.float32): input signal
-        param (tf.float32, optional): parameter. Defaults to 0.2.
-
-    Returns:
-        tf.float32: outputs
-    """
-    outputs = 2 / ( param * tf.sqrt(3.0) ) * (
-                    tf.math.atan(
-                        ( 1 + 2 * param * tf.abs(inputs) ) / tf.sqrt(3.0)
-                    ) - PI / 6
-                )
-
-    return outputs
 
 @tf.function
 def train_kernel(
@@ -77,31 +59,18 @@ def train_kernel(
                 states,
                 training    = training,
                 quantized   = quantized)
-        eps_amp = 10**-12
+
         amp_sn = tf.math.sqrt(pspec_sn)
         amp_s  = tf.math.sqrt(pspec_s)
-        estimation, ave_mask = deepfiltering(
-                        amp_sn,
-                        est,
-                        len_filter,
-                        len_lookahead)
-        # ave_loss, steps = loss_sdr(
-        #             amp_s,
-        #             amp_sn * est,
-        #             mask)
         ave_loss, steps = loss_mse(
-                amp_s[:,:-(len_lookahead+1):],        # clean
-                estimation[:,:-(len_lookahead+1),:], # noisy * mask
-                masking = mask[:,:-(len_lookahead+1),:])
-        # ave_loss, steps = loss_mse(
-        #         atan(amp_s + eps_amp),        # clean
-        #         atan(amp_sn * est + eps_amp), # noisy * mask
-        #         masking = mask)
+                amp_s,        # clean
+                amp_sn * est, # noisy * mask
+                mask,
+                exp=0.6)
+
     if training:
         gradients = tape.gradient(ave_loss, net.trainable_variables)
 
-        # gradients_clips = [ tf.clip_by_norm(grad, 1)
-        #                     for grad in gradients ]
         gradients_clips = [ grad
                             for grad in gradients ]
 
@@ -330,6 +299,7 @@ def main(args):
                 len0 = int(len(lines) / batchsize) * batchsize
                 fnames[tr_set] = [line.strip() for line in lines[:len0]]
                 fnames[tr_set] = filter_in_data(fnames[tr_set])
+
     _, dataset = tfrecords_pipeline(
             fnames['train'],
             batchsize = batchsize,
@@ -460,12 +430,12 @@ def filter_in_data(fnames):
         _type_: _description_
     """
     ntypes = [
-            # 'ESC-50-MASTER',
+            'ESC-50-MASTER',
             'wham_noise',
-            # "social_noise",
-            # 'FSD50K',
-            # 'musan',
-            # 'traffic'
+            "social_noise",
+            'FSD50K',
+            'musan',
+            'traffic'
         ]
     fnames_out=[]
     for fname in fnames:
@@ -474,6 +444,7 @@ def filter_in_data(fnames):
                 fnames_out+=[fname]
                 break
     return fnames_out
+
 if __name__ == "__main__":
 
     logger = logging.getLogger(__name__)
@@ -485,13 +456,13 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch256_pspec_mse_reverb_conv1_df4_ahead_new.txt',
+        default='nn_arch/def_se_nn_arch72_mel.txt',
         help='nn architecture')
 
     argparser.add_argument(
         '-ft',
         '--feat_type',
-        default='pspec',
+        default='mel',
         help='feature type: \'mel\'or \'pspec\'')
 
     argparser.add_argument(
@@ -523,14 +494,14 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-q',
         '--quantized',
-        default=False,
+        default=True,
         type=bool,
         help='is post quantization?')
 
     argparser.add_argument(
         '-l',
         '--learning_rate',
-        default =  4 * 10**-4,
+        default =  1 * 10**-4,
         type=float,
         help='learning rate')
 
@@ -544,7 +515,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default="random",
+        default='latest',
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \

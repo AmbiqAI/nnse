@@ -24,7 +24,7 @@ def feat_stats_estimator(
                     dtype = tf.float64, trainable = False)
     inv_std_stats = tf.Variable(tf.zeros((dim_feat,), dtype = tf.float64),
                         dtype = tf.float64, trainable = False)
-    tot = tf.Variable(0, dtype = tf.float64)
+    tot = tf.Variable(0, dtype = tf.float64, trainable=False)
 
     num_batches = int(len(fnames) / batchsize)
 
@@ -34,6 +34,7 @@ def feat_stats_estimator(
         """
         if feat_type=='mel':
             feats = tf.matmul(data, fbanks)
+            feats = tf_log10_eps(feats)
         elif feat_type=='pspec':
             feats = tf_log10_eps(data)
         return fakefix_tf(feats, 32, 15)
@@ -66,7 +67,7 @@ def feat_stats_estimator(
         tmp = tf.math.reduce_sum( masks * (feats - mean_stats)**2, axis = (0,1))
         inv_std_stats = inv_std_stats + tf.cast(tmp, tf.float64)
 
-    inv_std_stats = 1.0 / tf.math.sqrt(inv_std_stats / tot)
+    inv_std_stats = 1.0 / (2**-15 + tf.math.sqrt(inv_std_stats / tot))
     inv_std_stats = tf.cast(inv_std_stats, tf.float32)
     inv_std_stats = fakefix_tf(inv_std_stats, 32, 15)
 

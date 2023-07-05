@@ -27,29 +27,19 @@ Note that all python scripts described here are all under the folder `nnse/pytho
 ## Dataset
 Before working on training SE model, we need to download the required datasets. Please read on their license agreements carefully in [here](../docs/README.md).
 ## Quick start
-We provided the 2 already trained models. The user can directly try on it. \
+We provided one already trained model. The user can directly try on it. \
 `Small size model:` `~100k` parameters
 ```cmd
-  $ python test_se.py --epoch_loaded=62 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
-```
-
-`Large size model:` ~`1.116M` paramters
-```cmd
-  $ python test_se.py --epoch_loaded=195 --nn_arch='nn_arch/def_se_nn_arch256_pspec_mse.txt' --recording=1  --feat_type='pspec' 
-```
-
-`Large size dereverb model:` ~`1.116M` paramters
-```cmd
-  $ python test_se.py --epoch_loaded=182 --nn_arch='nn_arch/def_se_nn_arch256_pspec_mse_reverb.txt'  --recording=1  --feat_type='pspec' 
+  $ python test_se.py --epoch_loaded=50 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
 ```
 `Input argruments`:
   * `--nn_arch`: it will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
-  * `--epoch_loaded`: it will load the model saved in epoch = 62.
+  * `--epoch_loaded`: it will load the model saved in epoch = 50.
   * `--recording`:
     * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
     * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
       ```py
-      $ python test_se.py --epoch_loaded=70 --nn_arch='nn_arch/def_se_nn_arch256_pspec.txt' --recording=0  --feat_type='pspec' --test_wavefile='test_wavs/speech.wav' 
+      $ python test_se.py --epoch_loaded=50 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=0  --feat_type='mel' --test_wavefile='test_wavs/speech.wav' 
       ```
   * `--feat_type`: type of feature extraction.
     - `mel`: mel spectrogram
@@ -88,13 +78,13 @@ We provided the 2 already trained models. The user can directly try on it. \
       - `pspec`: power spectrogram
 3.  Test from recorded wave file. Type
     ```cmd
-      $ python test_se.py --epoch_loaded=62 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
+      $ python test_se.py --epoch_loaded=50 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
     ```
     `Input Arguments:`
 
       * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
       * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
-      * The argument `--epoch_loaded=62` means it will load the model saved in epoch = 62.
+      * The argument `--epoch_loaded=50` means it will load the model saved in epoch = 50.
       * `--recording`:
         * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
         * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.

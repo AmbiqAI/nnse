@@ -197,7 +197,7 @@ int main(void) {
 
     // tflite_init();
     // test_tflite();
-    seCntrlClass_reset(&cntrl_inst);
+    
     while (1) 
     {
         g_audioRecording = false;
@@ -206,9 +206,11 @@ int main(void) {
 #ifdef DEF_GUI_ENABLE
         while (1)
         {
+            
             ns_rpc_data_computeOnPC(&computeBlock, &IsRecordBlock);
             if (IsRecordBlock.buffer.data[0]==1)
             {
+                seCntrlClass_reset(&cntrl_inst);
                 g_intButtonPressed = 1;
                 ns_rpc_data_clientDoneWithBlockFromPC(&IsRecordBlock);
                 break;

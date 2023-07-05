@@ -160,9 +160,16 @@ class NNInferClass:
         spec, _, feat, pspec = self.feature_inst.frame_proc(data)
         if self.feat_type=='pspec':
             feat = log10_fakeFix(pspec)
-        feat = fakefix((feat - self.stats['nMean_feat']) * self.stats['nInvStd'], 16, 8)
+            feat = fakefix(np.log10(pspec+2**-15), 32, 15)
+        mean = self.stats['nMean_feat']
+        invstd = self.stats['nInvStd']
+        feat = fakefix(
+            (feat - mean) * invstd,
+            16, 8)
         self.feats = self.feats[1:]
-        self.feats = np.concatenate((self.feats, np.expand_dims(feat, axis=0)), axis=0)
+        self.feats = np.concatenate(
+            (self.feats, np.expand_dims(feat, axis=0)),
+            axis=0)
         return feat, spec
 
     def frame_proc_tf(
@@ -175,7 +182,6 @@ class NNInferClass:
         feats_expand = np.expand_dims(self.feats, axis=0)
 
         if self.count_run == 0:
-
             est, self.states = self.nn_infer(
                 feats_expand,
                 1.0,

@@ -7,7 +7,11 @@
 #include "neural_nets.h"
 #include "minmax.h"
 #include "nnsp_identification.h"
-#include "ns_ambiqsuite_harness.h"
+#include "ambiq_nnsp_debug.h"
+#include "nnid_class.h"
+#if AMBIQ_NNSP_DEBUG==1
+#include "debug_files.h"
+#endif
 #define CHECK_POWER 0
 
 #if CHECK_POWER
@@ -20,7 +24,29 @@
 #include <math.h>
 #include <stdio.h>
 #endif
-int16_t glob_se_out[LEN_STFT_HOP];
+#include "iir.h"
+int16_t glob_se_out[160];
+IIR_CLASS inst_dcrm;
+int16_t input_tmp[160];
+int32_t embd_nnid[64] = {
+        -1628, -1539, -4392,  -560,   408, -7558,  1119,  5851, -1103,
+        8611,  -416,  5804, -4506, -2787, -1700,  4906,  2866,  1750,
+        -235, -5588,  1712,  6512, -5315,  1418, -3975, -4423, -2045,
+        9122, -3814,  7408,   984,  -330,  1010, -1376, -2152,   409,
+       -2607, -7301, -1874,  -407,  2522,  4440, -2831, -1328,  1913,
+        2945,  6214,  1257, -6725, -4230, -2121,  1773,  3555, -1782,
+       -1663, -1325,  3906,  3340,  2317, -2386, -3092,  2364, -4930,
+        4128 };
+
+NNID_CLASS state_nnid = {
+    .pt_embd = embd_nnid,
+    .dim_embd=64,
+    .is_get_corr = 0,
+    .thresh_get_corr = 179,
+    .thresh_trigger=0.8,
+    .corr = 0,
+};
+int32_t glob_nn_output[512];
 int NNSPClass_init(
         NNSPClass* pt_inst,
         void* pt_net,
@@ -30,10 +56,11 @@ int NNSPClass_init(
         const int32_t* pt_stdR,
 	    int16_t * pt_thresh_prob,
 	    int16_t *pt_th_count_trigger,
-        int16_t num_mfltrBank,
-        int16_t num_dnsmpl)
+        PARAMS_NNSP *pt_params)
 {
-
+    pt_inst->pt_dcrm = &inst_dcrm;
+    IIR_CLASS_init(pt_inst->pt_dcrm);
+    pt_inst->pt_params = pt_params;
     pt_inst->nn_id = nn_id;
     
     pt_inst->pt_feat = (void*) pt_feat;
@@ -45,9 +72,14 @@ int NNSPClass_init(
             pt_mean,
             pt_stdR,
             ((NeuralNetClass*) pt_inst->pt_net)->qbit_input[0],
-            num_mfltrBank);
+            pt_params->num_mfltrBank,
+            pt_params->winsize_stft,
+            pt_params->hopsize_stft,
+            pt_params->fftsize,
+            pt_params->pt_stft_win_coeff
+        );
 
-    pt_inst->num_dnsmpl = num_dnsmpl;
+    pt_inst->num_dnsmpl = pt_params->num_dnsmpl;
 
     pt_inst->pt_thresh_prob = pt_thresh_prob;
 
@@ -56,16 +88,18 @@ int NNSPClass_init(
     NeuralNetClass_init((NeuralNetClass*) pt_inst->pt_net);
     
     pt_inst->pt_se_out = glob_se_out;
-    ns_lp_printf("nn_id=%d\n", pt_inst->nn_id);
-    ns_lp_printf("num_mfltrBank=%d\n", num_mfltrBank);
-    ns_lp_printf("num_dnsmpl=%d\n", num_dnsmpl);
     
+    if (pt_inst->nn_id== nnid_id)
+        pt_inst->pt_state_nnid = (void*) &state_nnid;
+    else
+        pt_inst->pt_state_nnid = (void*) 0;
 	return 0;
 }
 
 int NNSPClass_reset(NNSPClass* pt_inst)
 {
 	int i;
+    IIR_CLASS_reset(pt_inst->pt_dcrm);
     FeatureClass_setDefault((FeatureClass*) pt_inst->pt_feat);
     NeuralNetClass_setDefault((NeuralNetClass*) pt_inst->pt_net);
     pt_inst->slides = 1;
@@ -80,16 +114,52 @@ int NNSPClass_reset(NNSPClass* pt_inst)
     pt_inst->argmax_last = 0;
 	return 0;
 }
-
+int16_t NNSPClass_get_nnOut_dim(NNSPClass* pt_inst)
+{
+    NeuralNetClass* pt_net = (NeuralNetClass*) pt_inst->pt_net;
+    return pt_net->size_layer[pt_net->numlayers];
+}
+int16_t NNSPClass_get_nn_out(int32_t* output, int len)
+{
+    for (int i = 0; i < len; i++)
+    {
+        output[i] = glob_nn_output[i];
+    }
+}
+int16_t NNSPClass_get_nn_out_base16b(int16_t* output, int len)
+{
+    int16_t* pt = (int16_t*)glob_nn_output;
+    for (int i = 0; i < len; i++)
+    {
+        output[i] = pt[i];
+    }
+}
 int16_t NNSPClass_exec(
         NNSPClass* pt_inst,
         int16_t* rawPCM)
 {
-	static int32_t output[512];
+    
+    NNID_CLASS* pt_nnid = (NNID_CLASS*) pt_inst->pt_state_nnid;
     FeatureClass* pt_feat   = (FeatureClass*)  pt_inst->pt_feat;
     NeuralNetClass* pt_net  = (NeuralNetClass*) pt_inst->pt_net;
     int8_t debug_layer = -1;
-    FeatureClass_execute(pt_feat, rawPCM);
+    int16_t *tmp;
+    int16_t* pt_inputs;
+    for (int i = 0; i < 160; i++)
+    {
+        rawPCM[i] = (rawPCM[i] * pt_inst->pt_params->pre_gain_q8) >> 8;
+    }
+    if (pt_inst->pt_params->is_dcrm)
+    {
+        IIR_CLASS_exec(pt_inst->pt_dcrm, input_tmp, rawPCM, 160);
+        pt_inputs = input_tmp;
+    }
+    else
+    {
+        pt_inputs = rawPCM;
+    }
+
+    FeatureClass_execute(pt_feat, pt_inputs);
 
     if (pt_inst->slides == 1)
     {
@@ -102,7 +172,7 @@ int16_t NNSPClass_exec(
         NeuralNetClass_exe(
             pt_net, 
             pt_feat->normFeatContext, 
-            output,
+            glob_nn_output,
             debug_layer);
 
         switch (pt_inst->nn_id)
@@ -110,29 +180,47 @@ int16_t NNSPClass_exec(
         case s2i_id:
             s2i_post_proc(
                 pt_inst,
-                output,
+                glob_nn_output,
                 &pt_inst->trigger);
             break;
 
         case kws_galaxy_id:
             binary_post_proc(
                 pt_inst,
-                output,
+                glob_nn_output,
                 &pt_inst->trigger);
             break;
 
         case vad_id:
             binary_post_proc(
                 pt_inst,
-                output,
+                glob_nn_output,
                 &pt_inst->trigger);
             break;
 
+        case nnid_id:
+            if (pt_nnid->is_get_corr)
+                nnidClass_get_cos(
+                    glob_nn_output,
+                    pt_nnid->pt_embd,
+                    pt_nnid->dim_embd,
+                    &pt_nnid->corr);
+            break;
+
         case se_id:
+#if AMBIQ_NNSP_DEBUG == 1
+            tmp = glob_nn_output;
+            for (int i = 0; i < 257; i++)
+            {
+                fprintf(file_mask_c, "%d ", tmp[i]);
+            }
+            fprintf(file_mask_c, "\n");
+#endif
             se_post_proc(
                 pt_inst,
-                (int16_t*) output,
+                (int16_t*)glob_nn_output,
                 pt_inst->pt_se_out);
+            
             break;
         }
 
@@ -174,8 +262,16 @@ void se_post_proc(
     stftModule* pt_stft_state = &(pt_feat->state_stftModule);
     int32_t *spec = pt_stft_state->spec;
     int64_t tmp;
+    int start_bin = pt_inst->pt_params->start_bin;
+    NeuralNetClass* pt_net = (NeuralNetClass*)pt_inst->pt_net;
+    int dim_out = pt_net->size_layer[pt_net->numlayers];
+    for (int i = 0; i < start_bin; i++)
+    {
+        spec[2 * i] = 0;
+        spec[2 * i + 1] = 0;
+    }
 
-    for (int i = 0; i < (1 + (LEN_FFT_NNSP >> 1)); i++)
+    for (int i = start_bin; i < start_bin + dim_out; i++)
     {
         tmp = (int64_t) pt_nn_est[i] * (int64_t) spec[2*i];
         tmp >>= 15;
@@ -184,16 +280,14 @@ void se_post_proc(
         tmp = (int64_t) pt_nn_est[i] * (int64_t) spec[2*i + 1];
         tmp >>= 15;
         spec[2*i + 1] = (int32_t) tmp;
-
-        tmp = (int64_t) pt_nn_est[i] * (int64_t) spec[2*(512-i)];
-        tmp >>= 15;
-        spec[2*(512-i)] = (int32_t) tmp;
-
-        tmp = (int64_t) pt_nn_est[i] * (int64_t) spec[(512-i) * 2 + 1];
-        tmp >>= 15;
-        spec[(512-i) * 2 + 1] = (int32_t) tmp;
     }
-    
+
+    for (int i = start_bin + dim_out; i < 257; i++)
+    {
+        spec[2 * i] = 0;
+        spec[2 * i + 1] = 0;
+    }
+
     stftModule_synthesize_arm(
         pt_stft_state,
         spec,

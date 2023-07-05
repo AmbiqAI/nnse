@@ -14,6 +14,7 @@ from nnsp_pack.pyaudio_animation import AudioShowClass
 from nnsp_pack.nn_infer import NNInferClass
 from nnsp_pack.stft_module import stft_class
 from data_se import params_audio as PARAM_AUDIO
+from nnsp_pack.basic_dsp import dc_remove
 
 SHOW_HISTOGRAM  = False
 NP_INFERENCE    = False
@@ -138,11 +139,14 @@ def main(args):
     data, sample_rate = sf.read(wavefile)
     if data.ndim > 1:
         data=data[:,0]
+
     if sample_rate > PARAM_AUDIO['sample_rate']:
         data = librosa.resample(
                 data,
                 orig_sr=sample_rate,
                 target_sr=PARAM_AUDIO['sample_rate'])
+
+    data = dc_remove(data)
     sd.play(data, PARAM_AUDIO['sample_rate'])
 
     se_inst = SeClass(
@@ -165,13 +169,13 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch256_pspec_mse_reverb_conv1_df4_ahead_new.txt',
+        default='nn_arch/def_se_nn_arch72_mel.txt',
         help='nn architecture')
 
     argparser.add_argument(
         '-ft',
         '--feat_type',
-        default='pspec',
+        default='mel',
         help='feature type: \'mel\'or \'pspec\'')
 
     argparser.add_argument(
@@ -184,7 +188,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-v',
         '--test_wavefile',
-        default = 'test_wavs/keyboard_steak.wav',
+        default = 'test_wavs/i_like_steak.wav',
         help    = 'The wavfile name to be tested')
 
     argparser.add_argument(
@@ -196,7 +200,7 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 73, # 70
+        default= 50, # 70
         help='starting epoch')
 
     main(argparser.parse_args())

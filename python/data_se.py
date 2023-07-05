@@ -20,8 +20,9 @@ from nnsp_pack.feature_module import FeatureClass, display_stft_all
 from nnsp_pack import add_noise
 from nnsp_pack import boto3_op
 from nnsp_pack.se_download import se_download
+from nnsp_pack.basic_dsp import dc_remove
 
-DEBUG = True
+DEBUG = False
 UPLOAD_TFRECORD_S3 = False
 DOWLOAD_DATA = False
 REVERB = True
@@ -35,19 +36,19 @@ else:
     SNR_DBS = [-6, -3, 0, 3, 6, 9, 12, 15, 30]
 
 NTYPES = [
-    # 'ESC-50-MASTER',
-    # 'wham_noise',
+    'ESC-50-MASTER',
+    'wham_noise',
     "social_noise",
-    # 'FSD50K',
-    # 'musan',
-    # 'traffic'
+    'FSD50K',
+    'musan',
+    'traffic'
 ]
 params_audio = {
     'win_size'      : 480,
     'hop'           : 160,
     'len_fft'       : 512,
     'sample_rate'   : 16000,
-    'nfilters_mel'  : 36 }
+    'nfilters_mel'  : 72 }
 
 def download_data():
     """
@@ -210,14 +211,18 @@ class FeatMultiProcsClass(multiprocessing.Process):
                 len(speech),
                 self.feat_inst.sample_rate)
             snr_db = self.snr_dbs[np.random.randint(0,len(self.snr_dbs))]
+            speech = dc_remove(speech)
+            noise  = dc_remove(noise)
             audio_sn, audio_s = add_noise.add_noise(
                                     speech,
                                     noise,
                                     snr_db,
                                     stime, etime,
                                     return_all=True,
-                                    snr_dB_improved = 20,
-                                    rir=rir)
+                                    snr_dB_improved = None,
+                                    rir=rir,
+                                    min_amp=0.01,
+                                    max_amp=0.95)
             # feature extraction of sig
             spec_sn, _, feat_sn, pspec_sn = self.feat_inst.block_proc(audio_sn)
             spec_s, _, feat_s, pspec_s    = self.feat_inst.block_proc(audio_s)
@@ -490,7 +495,7 @@ if __name__ == "__main__":
         '-rb',
         '--reverb_prob',
         type    = float,
-        default = 0,
+        default = 0.2,
         help    = 'percentage of size for reverb dataset')
 
     argparser.add_argument(
@@ -508,7 +513,7 @@ if __name__ == "__main__":
         '-s',
         '--datasize_noise',
         type    = int,
-        default = 30000,
+        default = 45000,
         help='How many speech samples per noise')
 
     argparser.add_argument(

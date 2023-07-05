@@ -187,11 +187,7 @@ def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
 
         ax_handle.set_ylim([0, len_feat])
         my_colorbar(ax_handle, im)
-        
-
         ax_handle.set_xlim([0,1000])
-    
-       
     plt.show()
 
 def display_stft_tfmask(
@@ -232,7 +228,7 @@ def display_stft_tfmask(
     ax_handle.set_ylim([0, sample_rate >> 1])
     my_colorbar(ax_handle, im)
     ax_handle.text(0.2, 0.2, 'spec')
-    
+
     # Draw the mel spec
     ax_handle = plt.subplot(4,1,2)
     len_feat, len0 = melspec_db.shape

@@ -87,11 +87,26 @@ def loss_mse(
         estimation,   # estimator
         masking,      # mask
         reg = 0,       # regularization,
-        lam = 1.0  # coefficient of reg
-        ):
+        lam = 1.0,  # coefficient of reg
+        eps = 10**-6,
+        exp = 0.6):
     """
     MSE loss per step
     """
+    def pow_shift(inputs, exp=0.3, eps=10**-6):
+        """
+        Remove bias of power with shift 
+        """
+        return tf.pow(inputs, exp)-tf.pow(eps,exp)
+
+    target = pow_shift(
+        target+eps,
+        exp=exp,
+        eps=eps)
+    estimation = pow_shift(
+        estimation+eps,
+        exp=exp,
+        eps=eps)
     mse = tf.reduce_sum(
         masking * tf.math.square(target - estimation) )
     steps = tf.reduce_sum(masking)
