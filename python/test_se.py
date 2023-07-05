@@ -101,11 +101,6 @@ class SeClass(NNInferClass):
 
         fig_name = re.sub(r'\.wav', '.pdf', fname)
 
-        # if self.len_filter != 1:
-        #     steps, dim_out = tfmasks.shape
-        #     dim = int(dim_out / self.len_filter)
-        #     tfmasks = tfmasks[:,-dim*(self.len_lookahead+1):-dim*self.len_lookahead]
-
         display_stft_tfmask(
             data,
             specs.T,

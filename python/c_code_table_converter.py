@@ -229,9 +229,9 @@ def converter(  net_tf,
             file.write(f"\t.num_mfltrBank = {PARAMS_AUDIO['nfilters_mel']},\n")
             file.write(f"\t.num_dnsmpl = {num_dnsampl},\n")
             file.write(f"\t.pt_stft_win_coeff = stft_win_coeff_w{PARAMS_AUDIO['win_size']}_h{PARAMS_AUDIO['hop']},\n") # pylint: disable=line-too-long
-            file.write(f"\t.start_bin = 0,\n")
-            file.write(f"\t.is_dcrm = 1,\n")
-            file.write(f"\t.pre_gain_q8 = 3840, // q8\n")
+            file.write("\t.start_bin = 0,\n")
+            file.write("\t.is_dcrm = 1,\n")
+            file.write("\t.pre_gain_q8 = 3840, // q8\n")
             file.write('};\n')
 
             #-----------------stats---------------------------------
@@ -446,7 +446,7 @@ def main(args):
     folder_c        = args.folder_c
 
     out = load_nn_arch(f"{nn_arch}.txt")
-    neurons, _, layer_types, activations, num_context, num_dnsampl, scalar_output, len_filter, len_lookahead = out
+    neurons, _, layer_types, activations, num_context, num_dnsampl, scalar_output, len_filter, len_lookahead = out # pylint: disable=line-too-long
     folder_nn = setup_nn_folder(nn_arch)
     nn_infer = NeuralNetClass(
         neurons     = neurons,

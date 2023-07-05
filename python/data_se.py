@@ -511,7 +511,7 @@ if __name__ == "__main__":
         '-s',
         '--datasize_noise',
         type    = int,
-        default = 45000,
+        default = 20000, # 45000
         help='How many speech samples per noise')
 
     argparser.add_argument(

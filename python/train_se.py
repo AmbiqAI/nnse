@@ -1,5 +1,5 @@
 """
-Training script for s2i RNN
+Training script for SE RNN
 """
 import os
 import re
@@ -8,7 +8,6 @@ import argparse
 import pickle
 import tensorflow as tf
 import numpy as np
-import random
 import matplotlib.pyplot as plt
 from nnsp_pack.nn_module import NeuralNetClass, lstm_states, tf_round
 from nnsp_pack.tfrecord_converter_se_split import tfrecords_pipeline
@@ -216,7 +215,7 @@ def main(args):
     optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
 
     arch = load_nn_arch(args.nn_arch)
-    neurons, drop_rates, layer_types, activations, num_context, num_dnsampl, scalar_output, len_filter, len_lookahead = arch
+    neurons, drop_rates, layer_types, activations, num_context, num_dnsampl, scalar_output, len_filter, len_lookahead = arch # pylint: disable=line-too-long
     folder_nn = setup_nn_folder(args.nn_arch)
 
     dim_feat = neurons[0]
