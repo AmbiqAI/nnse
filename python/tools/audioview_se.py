@@ -20,6 +20,7 @@ import pyaudio
 FRAMES_TO_SHOW  = 500
 SAMPLING_RATE   = 16000
 HOP_SIZE        = 160
+PLAY_AUDIO      = True
 
 class DataServiceClass:
     """
