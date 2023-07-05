@@ -1,0 +1,9 @@
+   text	   data	    bss	    dec	    hex	filename
+    544	      0	  32000	  32544	   7f20	build/src/PcmBufClass.o
+ 103546	    380	    432	 104358	  197a6	build/src/def_nn3_se_new.o
+    240	      0	   1448	   1688	    698	build/src/seCntrlClass.o
+     68	      0	      8	     76	     4c	build/src/ns-core/ns_core.o
+    622	  16384	      0	  17006	   426e	build/src/ns-core/startup_gcc.o
+   1000	      0	     24	   1024	    400	build/src/ns-core/heap_4.o
+   1268	    148	   1990	   3406	    d4e	build/src/main_se.o
+ 312932	   2836	  60076	 375844	  5bc24	build/main.axf
