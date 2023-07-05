@@ -38,10 +38,8 @@ else:
 NTYPES = [
     'ESC-50-MASTER',
     'wham_noise',
-    "social_noise",
     'FSD50K',
     'musan',
-    'traffic'
 ]
 params_audio = {
     'win_size'      : 480,

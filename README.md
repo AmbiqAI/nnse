@@ -42,7 +42,7 @@ From the `nnse/evb/` directory:
    ```
    You should see a GUI popping out.
    You might need to change the option `--tty` depending on your OS.
-   The option `Playback=True` means you want to play the enhanced speech on the other computer via internet. You need to setup VLC player [here](docs/demo.pdf)
+   The option `Playback=1` means you want to play the enhanced speech on the other computer via internet. You need to setup VLC player [here](docs/demo.pdf)
 7. On your GUI, prress `record` to start recording and `stop` to stop recording. 
 8. Check the two recording files under `nnse/evb/audio_result/`. 
    - `audio_raw.wav`: the raw PCM data from your mic.

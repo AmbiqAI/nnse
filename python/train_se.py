@@ -432,10 +432,8 @@ def filter_in_data(fnames):
     ntypes = [
             'ESC-50-MASTER',
             'wham_noise',
-            "social_noise",
             'FSD50K',
             'musan',
-            'traffic'
         ]
     fnames_out=[]
     for fname in fnames:
