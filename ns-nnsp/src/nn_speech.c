@@ -147,7 +147,7 @@ int16_t NNSPClass_exec(
     int16_t* pt_inputs;
     for (int i = 0; i < 160; i++)
     {
-        rawPCM[i] = (rawPCM[i] * pt_inst->pt_params->pre_gain_q8) >> 8;
+        rawPCM[i] = (rawPCM[i] * (int16_t) pt_inst->pt_params->pre_gain_q1) >> 1;
     }
     if (pt_inst->pt_params->is_dcrm)
     {

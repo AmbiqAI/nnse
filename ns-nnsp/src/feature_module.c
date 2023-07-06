@@ -27,6 +27,9 @@ void FeatureClass_construct(
 		int16_t fftsize,
 		const int16_t *pt_stft_win_coeff)
 {
+	
+	
+
 	stftModule_construct(
 		&ps->state_stftModule,
 		winsize,

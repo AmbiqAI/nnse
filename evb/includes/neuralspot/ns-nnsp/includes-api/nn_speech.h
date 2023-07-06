@@ -20,7 +20,7 @@ typedef struct
 	const int16_t* pt_stft_win_coeff;
 	int16_t start_bin;
 	int16_t is_dcrm;
-	int16_t pre_gain_q8; // q8
+	int16_t pre_gain_q1; // q1
 }PARAMS_NNSP;
 
 typedef struct

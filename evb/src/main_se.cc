@@ -9,6 +9,7 @@
 #include "ambiq_nnsp_const.h"
 #include "ns_timer.h"
 #include "ns_energy_monitor.h"
+#include "nn_speech.h"
 
 #ifdef DEF_GUI_ENABLE
 #include "ns_rpc_generic_data.h"
@@ -154,6 +155,7 @@ const ns_power_config_t ns_lp_audio = {
 int main(void) {
     seCntrlClass cntrl_inst;
     int16_t *se_output = g_in16AudioDataBuffer + LEN_STFT_HOP;
+    NNSPClass *pt_nnsp;
     g_audioRecording = false;
 
     ns_core_init();
@@ -174,7 +176,7 @@ int main(void) {
 
     // initialize neural nets controller
     seCntrlClass_init(&cntrl_inst);
-
+    pt_nnsp = (NNSPClass*) cntrl_inst.pt_nnsp;
 #ifdef DEF_ACC32BIT_OPT
     ns_lp_printf("You are using \"32bit\" accumulator.\n");
 #else
@@ -202,6 +204,7 @@ int main(void) {
     {
         g_audioRecording = false;
         g_intButtonPressed = 0;
+        
         ns_deep_sleep();
 #ifdef DEF_GUI_ENABLE
         while (1)
@@ -232,6 +235,7 @@ int main(void) {
                 if (g_audioReady) 
                 {
                     // execution of each time frame data
+                    pt_nnsp->pt_params->pre_gain_q1 = IsRecordBlock.buffer.data[1];
                     seCntrlClass_exec(
                         &cntrl_inst,
                         g_in16AudioDataBuffer,

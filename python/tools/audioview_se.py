@@ -129,13 +129,11 @@ class DataServiceClass:
                 self.lock.acquire()
                 data = np.frombuffer(pcmBlock.buffer, dtype=np.int16).copy()
                 ch = self.ch_select[0]
-                gain_play = int(np.log2(10**(self.gain_play[0] / 20)))
                 self.lock.release()
 
                 data_reshape = data.reshape((2, HOP_SIZE)).copy()
                 data_flatten = data_reshape.copy().T.flatten()
                 self.wavefile.writeframesraw(data_flatten.tobytes())
-                data_reshape = data_reshape << gain_play
 
                 if self.playback:
                     self.stream.write(data_reshape[ch].tobytes())
@@ -174,11 +172,14 @@ class DataServiceClass:
         """
         self.lock.acquire()
         is_record = self.is_record[0]
+        gain_play = self.gain_play[0]
         self.lock.release()
+        gain_play = np.int8(10**(gain_play / 20)) * 2
+        
         if (in_block.cmd == GenericDataOperations_EvbToPc.common.command.extract_cmd) and (
             in_block.description == "CalculateMFCC_Please"):
 
-            data2pc = [is_record]
+            data2pc = [is_record, gain_play]
             IsRecordBlock.value = GenericDataOperations_EvbToPc.common.dataBlock(
                 description ="*\0",
                 dType       = GenericDataOperations_EvbToPc.common.dataType.uint8_e,
@@ -487,7 +488,7 @@ def main(args):
     databuf_enhance = Array('d', FRAMES_TO_SHOW * HOP_SIZE)
     record_ind      = Array('i', [0]) # is_record indicator. 'No record' as initialization
     cyc_count       = Array('i', [0])
-    gain_play       = Array('f', [0]) # gain in dB
+    gain_play       = Array('f', [10]) # gain in dB
     # choose the channel to playback
     ch_select       = Array('i', [1]) # 0: raw data, 1: enhanced data
 
