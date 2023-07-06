@@ -35,7 +35,7 @@ class DataServiceClass:
             is_record,
             cyc_count,
             ch_select,
-            gain_play,
+            gain_play_db,
             playback=0):
 
         self.sp_types=["raw", "enhance"]
@@ -48,7 +48,7 @@ class DataServiceClass:
         self.lock           = lock
         self.is_record      = is_record
         self.ch_select      = ch_select
-        self.gain_play      = gain_play
+        self.gain_play_db   = gain_play_db
         self.playback       = playback
 
     def wavefile_init(self, wavename):
@@ -172,10 +172,10 @@ class DataServiceClass:
         """
         self.lock.acquire()
         is_record = self.is_record[0]
-        gain_play = self.gain_play[0]
+        gain_play = self.gain_play_db[0]
         self.lock.release()
-        gain_play = np.int8(10**(gain_play / 20)) * 2
-        
+        gain_play = np.int8(10**(gain_play / 20)) * 2 # in Q7.1 format
+
         if (in_block.cmd == GenericDataOperations_EvbToPc.common.command.extract_cmd) and (
             in_block.description == "CalculateMFCC_Please"):
 
@@ -202,7 +202,7 @@ class VisualDataClass:
             event_stop,
             cyc_count,
             ch_select,
-            gain_play):
+            gain_play_db):
 
         self.sp_types = ["raw", "enhance"]
         self.databuf = {}
@@ -213,7 +213,7 @@ class VisualDataClass:
         self.event_stop = event_stop
         self.cyc_count = cyc_count
         self.ch_select = ch_select
-        self.gain_play = gain_play
+        self.gain_play_db = gain_play_db
         secs2show = FRAMES_TO_SHOW * HOP_SIZE/SAMPLING_RATE
         self.xdata = np.arange(FRAMES_TO_SHOW * HOP_SIZE) / SAMPLING_RATE
         self.fig, self.ax_handle = plt.subplots(2,1)
@@ -282,12 +282,12 @@ class VisualDataClass:
         self.text_info.set_text("enhance")
 
         # Make a horizontal slider to control the frequency.
-        ax_play_slider = self.fig.add_axes([0.25, 0.1, 0.2, 0.03])
+        ax_play_db_slider = self.fig.add_axes([0.25, 0.1, 0.2, 0.03])
         self.lock.acquire()
-        gain_play = self.gain_play[0]
+        gain_play = self.gain_play_db[0]
         self.lock.release()
-        self.gain_play_slider = Slider(
-            ax=ax_play_slider,
+        self.gain_play_db_slider = Slider(
+            ax=ax_play_db_slider,
             label='gain [dB]  ',
             valmin=0,
             valmax=40,
@@ -402,7 +402,7 @@ class VisualDataClass:
                 self.lock.acquire()
                 cyc_count = self.cyc_count[0]
                 ch_select = self.ch_select[0]
-                self.gain_play[0] = self.gain_play_slider.val
+                self.gain_play_db[0] = self.gain_play_db_slider.val
                 np_databuf = {}
                 for sp_type in self.sp_types:
                     np_databuf[sp_type] = self.databuf[sp_type][0:].copy()
@@ -430,7 +430,7 @@ def target_proc_draw(
         event_stop,
         cyc_count,
         ch_select,
-        gain_play):
+        gain_play_db):
     """
     one of multiprocesses: draw
     """
@@ -442,7 +442,7 @@ def target_proc_draw(
         event_stop,
         cyc_count,
         ch_select,
-        gain_play)
+        gain_play_db)
 
 def target_proc_evb2pc(
         tty,
@@ -454,7 +454,7 @@ def target_proc_evb2pc(
         is_record,
         cyc_count,
         ch_select,
-        gain_play,
+        gain_play_db,
         playback=0):
     """
     one of multiprocesses: EVB sends data to PC
@@ -468,7 +468,7 @@ def target_proc_evb2pc(
             is_record,
             cyc_count,
             ch_select,
-            gain_play,
+            gain_play_db,
             playback)
     service = GenericDataOperations_EvbToPc.server.evb_to_pcService(handler)
     server = erpc.simple_server.SimpleServer(transport_evb2pc, erpc.basic_codec.BasicCodec)
@@ -488,7 +488,7 @@ def main(args):
     databuf_enhance = Array('d', FRAMES_TO_SHOW * HOP_SIZE)
     record_ind      = Array('i', [0]) # is_record indicator. 'No record' as initialization
     cyc_count       = Array('i', [0])
-    gain_play       = Array('f', [10]) # gain in dB
+    gain_play_db    = Array('f', [20]) # gain in dB
     # choose the channel to playback
     ch_select       = Array('i', [1]) # 0: raw data, 1: enhanced data
 
@@ -503,7 +503,7 @@ def main(args):
                               event_stop,
                               cyc_count,
                               ch_select,
-                              gain_play))
+                              gain_play_db))
     proc_evb2pc = Process(
                     target = target_proc_evb2pc,
                     args   = (  args.tty,
@@ -515,7 +515,7 @@ def main(args):
                                 record_ind,
                                 cyc_count,
                                 ch_select,
-                                gain_play,
+                                gain_play_db,
                                 args.playback))
     proc_draw.start()
     proc_evb2pc.start()

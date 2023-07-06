@@ -38,11 +38,11 @@ From the `nnse/evb/` directory:
    predicted slots/intents etc.
 6. On your cmd, type
    ```cmd
-   $ python ../python/tools/audioview_se.py --tty=/dev/tty.usbmodem1234561 --playback=True
+   $ python ../python/tools/audioview_se.py --tty=/dev/tty.usbmodem1234561 --playback=1
    ```
    You should see a GUI popping out.
    You might need to change the option `--tty` depending on your OS.
-   The option `Playback=1` means you want to play the enhanced speech on the other computer via internet. You need to setup VLC player [here](docs/demo.pdf)
+   The option `playback=1` means you want to play the enhanced speech on the other computer via internet. You need to setup VLC player [here](docs/demo.pdf)
 7. On your GUI, prress `record` to start recording and `stop` to stop recording. 
 8. Check the two recording files under `nnse/evb/audio_result/`. 
    - `audio_raw.wav`: the raw PCM data from your mic.
