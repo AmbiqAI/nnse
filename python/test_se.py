@@ -189,7 +189,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-q',
         '--quantized',
-        default = True,
+        default = False,
         type=bool,
         help='is post quantization?')
 

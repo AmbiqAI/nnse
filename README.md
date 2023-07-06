@@ -22,7 +22,7 @@ To work on Apollo4, you need
 - Arm GNU Toolchain 11.3
 - Segger J-Link v7.56+
 # Speech Enhancement
-This speech enhancement model is based on 16kHZ sampling rate. The model size is about 100kB.
+This speech enhancement model is based on 16 kHz sampling rate. The model size is about 100kB.
 
 ### `Dataset`
 The SE model is trained based on several audio dataset, including human speech and noises. Before you use this repo, please read on their license agreements carefully in [here](./docs/README.md).

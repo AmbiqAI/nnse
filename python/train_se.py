@@ -19,7 +19,7 @@ from nnsp_pack.tf_basic_math import tf_log10_eps
 import c_code_table_converter
 
 SHOW_STEPS          = False
-DISPLAY_HISTOGRAM   = True
+DISPLAY_HISTOGRAM   = False
 BLOCKS_PER_AUDIO    = 5
 DIM_TARGET          = 257
 PI                  = 3.1415926
