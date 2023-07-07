@@ -1,3 +1,5 @@
+#include "ambiq_nnsp_debug.h"
+#if ARM_FFT==1
 #include <stdint.h>
 #include <arm_math.h>
 #include "fft_arm.h"
@@ -5,12 +7,13 @@
 
 void arm_fft_init(
         void *p_fft_st_t,
-        uint32_t is_ifft)
+        uint32_t is_ifft,
+        int16_t fftsize)
 {
     arm_rfft_instance_q31 *p_fft_st = (arm_rfft_instance_q31*) p_fft_st_t;
     uint32_t bitReverseFlag=1;
     arm_rfft_init_q31(  p_fft_st,
-                        LEN_FFT_NNSP, 
+                        fftsize, 
                         is_ifft, 
                         bitReverseFlag);
 }
@@ -23,3 +26,4 @@ void arm_fft_exec(
     arm_rfft_instance_q31 *p_fft_st = (arm_rfft_instance_q31*) p_fft_st_t;
     arm_rfft_q31(p_fft_st, x, y);
 }
+#endif

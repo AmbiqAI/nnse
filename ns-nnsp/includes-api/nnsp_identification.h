@@ -6,6 +6,7 @@ typedef enum
 	vad_id				= 1,
 	kws_galaxy_id		= 2,
 	se_id				= 3,
-	num_NNSP_IDS		= 4
+	nnid_id				= 4,
+	num_NNSP_IDS		= 5
 }NNSP_ID;
 #endif

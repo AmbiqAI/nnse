@@ -1,4 +1,4 @@
-tensorflow
+tensorflow < 2.11
 numpy
 librosa
 matplotlib
@@ -9,3 +9,4 @@ boto3
 wandb
 pyaudio
 pyqt5
+scipy

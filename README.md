@@ -22,7 +22,7 @@ To work on Apollo4, you need
 - Arm GNU Toolchain 11.3
 - Segger J-Link v7.56+
 # Speech Enhancement
-This speech enhancement model is based on 16kHZ sampling rate. The model size is about 100kB.
+This speech enhancement model is based on 16 kHz sampling rate. The model size is about 100kB.
 
 ### `Dataset`
 The SE model is trained based on several audio dataset, including human speech and noises. Before you use this repo, please read on their license agreements carefully in [here](./docs/README.md).
@@ -34,16 +34,19 @@ From the `nnse/evb/` directory:
 2. `make`
 3. `make deploy` Prepare two USB cables. Ensure your board is connected via both the `JLINK USB port` and the `audio USB port`. Then turn on the power on EVB.
 4. Plug a mic into the 3.5mm port, and push BTN0 to initiate voice recording
-5. `make view` will provide SWO output as the device is running, showing 
-   predicted slots/intents etc.
+5. `make view` will provide SWO output as the device is running.
 6. On your cmd, type
    ```cmd
-   $ python ../python/tools/audioview_se.py --tty=/dev/tty.usbmodem1234561 --playback=True
+   $ python ../python/tools/audioview_se.py --tty=/dev/tty.usbmodem1234561 --playback=1
    ```
-   You should see a GUI popping out.
-   You might need to change the option `--tty` depending on your OS.
-   The option `Playback=True` means you want to play the enhanced speech on the other computer via internet. You need to setup VLC player [here](docs/demo.pdf)
-7. On your GUI, prress `record` to start recording and `stop` to stop recording. 
+   You should see a GUI popping out as below. Click the `record` button to start the record. Anc click `stop` button to finish. The top panel will show the raw audio that microphone records, and the bottom one will show the enhanced audio.
+    <p align="center">
+      <img src="./pics/gui.png"  width="80%">
+    </p>
+
+   - You might need to change the option `--tty` depending on your OS.
+   - The option `playback=1` means you want to play the enhanced speech on the other computer via internet. One simple example is to use MS Teams (see [here](docs/demo.pdf)).
+      - `Note`: we suggest to use earphone on the host side to avoid the echo effect. 
 8. Check the two recording files under `nnse/evb/audio_result/`. 
    - `audio_raw.wav`: the raw PCM data from your mic.
    - `audio_se.wav`: the enhanced speech.
@@ -66,8 +69,6 @@ We illustrate this in Fig. 1.
 Also, in our specific s2i NN case, `def_nn0_s2i.c` has two purposes:
   1. For feature extraction, we use Mel spectrogram with 40 Mel-scale. To apply the standarization to the features in training dataset, it requires statistical mean and standard deviation, which is defined in `def_nn0_s2i.c`. 
   2. For the neural network, it points to the trained weight table defined in `def_nn0_s2i.c` as well.
-
-
 
 # Build NS-NNSP library from NeuralSPOT (Optional)
 If you want to modify or re-build the `ns-nnsp.a` library, you can follow the steps here. 

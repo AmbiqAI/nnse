@@ -22,9 +22,11 @@ def my_colorbar(ax_handle, im=None):
     else:
         cax.axis('off')
 
-def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
+def display_stft_all_new(pcm_sn_, spec_sn_, melspec_db_sn_,
                      pcm_s_, spec_s_, melspec_db_s_,
-                     sample_rate, label_frame=None):
+                     sample_rate,
+                     label_frame=None,
+                     xlim=None):
     """
     Display stft for s and s+n
     """
@@ -66,7 +68,8 @@ def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
         ax_handle.set_ylim([0, sample_rate >> 1])
         my_colorbar(ax_handle, im)
         ax_handle.text(0.2, 0.2, text)
-
+        if xlim:
+            ax_handle.set_xlim(xlim)
     # Draw the mel spec
     melspecs_db = [melspec_db_sn, melspec_db_s]
     texts = ['melspec (s+n)', 'melspec (s)']
@@ -89,7 +92,8 @@ def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
         ax_handle.text(0.2, 0.2, text)
         if label_frame is not None:
             ax_handle.plot(label_frame * 20)
-
+        if xlim:
+            ax_handle.set_xlim(xlim)
     # Draw the time seq
     pcms_sn = [pcm_sn, pcm_s]
     texts = ['melspec (s+n)', 'melspec (s)']
@@ -104,6 +108,86 @@ def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
         my_colorbar(ax_handle)
         ax_handle.text(0.2, 0.2, 'sig')
 
+    plt.show()
+
+
+def display_stft_all(pcm_sn_, spec_sn_, melspec_db_sn_,
+                     pcm_s_, spec_s_, melspec_db_s_,
+                     sample_rate,
+                     label_frame=None,
+                     xlim=None):
+    """
+    Display stft for s and s+n
+    """
+    pcm_sn = pcm_sn_.copy()
+    spec_sn = spec_sn_.copy()
+    melspec_db_sn = melspec_db_sn_.copy()
+    if pcm_sn.ndim > 1:
+        pcm_sn = pcm_sn[:,0]
+
+    pcm_s = pcm_s_.copy()
+    spec_s = spec_s_.copy()
+    melspec_db_s = melspec_db_s_.copy()
+    if pcm_s.ndim > 1:
+        pcm_s = pcm_s[:,0]
+
+    db_lim = [-50, 10]
+
+    # Draw the spectrogram
+    specs = [spec_sn, spec_s]
+    texts = ['spec (s+n)', 'spec (s)']
+    i = 1
+    # Draw the time seq
+    pcms_sn = [pcm_sn, pcm_s]
+    texts = ['melspec (s+n)', 'melspec (s)']
+    for pcm, text in zip(pcms_sn, texts):
+
+        ax_handle = plt.subplot(6,1,i)
+        i+=1
+        ax_time = np.arange(0, pcm.size)/sample_rate
+        ax_handle.plot(ax_time, pcm, linewidth=0.5)
+        ax_handle.set_xlim([0, 10])
+        ax_handle.set_ylim([-1,1])
+        my_colorbar(ax_handle)
+    
+    for spec, text in zip(specs, texts):
+        ax_handle = plt.subplot(6,1,i)
+        i += 1
+        _, len0 = spec.shape
+        ax_fr = np.arange(0, len0)
+        spec_db_sn = 20 * np.log10(np.maximum(np.abs(spec), 10**-5))
+
+        im = ax_handle.imshow( spec_db_sn,
+                        origin  = 'lower',
+                        cmap    = 'pink_r',
+                        aspect  = 'auto',
+                        vmin    = db_lim[0],
+                        vmax    = db_lim[1],
+                        extent  = [0 , ax_fr.max(), 0 , sample_rate >> 1])
+
+        ax_handle.set_ylim([0, sample_rate >> 1])
+        my_colorbar(ax_handle, im)
+        ax_handle.set_xlim([0,1000])
+    # Draw the mel spec
+    melspecs_db = [melspec_db_sn, melspec_db_s]
+    texts = ['melspec (s+n)', 'melspec (s)']
+    for melspec_db, text in zip(melspecs_db, texts):
+        ax_handle = plt.subplot(6,1,i)
+        i += 1
+        len_feat, len0 = melspec_db.shape
+        ax_fr = np.arange(0,len0)
+
+        im = ax_handle.imshow( melspec_db,
+                        origin  = 'lower',
+                        cmap    = 'pink_r',
+                        aspect  = 'auto',
+                        vmin    = melspec_db.min(),
+                        vmax    = melspec_db.max(),
+                        extent  = [0 , ax_fr.max(), 0 , len_feat])
+
+        ax_handle.set_ylim([0, len_feat])
+        my_colorbar(ax_handle, im)
+        ax_handle.set_xlim([0,1000])
     plt.show()
 
 def display_stft_tfmask(
@@ -174,8 +258,8 @@ def display_stft_tfmask(
             origin  = 'lower',
             cmap    = 'pink_r',
             aspect  = 'auto',
-            vmin    = 0,
-            vmax    = 1,
+            vmin    = tfmask.min(),
+            vmax    = tfmask.max(),
             extent  = [0 , ax_fr.max(), 0 , len_feat])
 
     ax_handle.set_ylim([0, len_feat])
@@ -192,6 +276,111 @@ def display_stft_tfmask(
     ax_handle.set_ylim([-1,1])
     my_colorbar(ax_handle)
     ax_handle.text(0.2, 0.2, 'sig')
+    if print_name:
+        fig = plt.gcf()
+        fig.set_size_inches((8.5, 11), forward=False)
+        plt.savefig(print_name, format='pdf', dpi=500)
+    plt.show()
+def display_stft_tfmask1(
+        pcm_,
+        spec_,
+        spec_s,
+        tfmask,
+        sample_rate,
+        label_frame=None,
+        print_name=None):
+    """
+    Display stft, tfmask
+    """
+    pcm = pcm_.copy()
+    spec = spec_.copy()
+    spec_s = spec_s.copy()
+    if pcm.ndim > 1:
+        pcm = pcm[:,0]
+
+    db_lim = [-50, 10]
+
+    # Draw the spectrogram
+    ax_handle = plt.subplot(4,1,1)
+    _, len0 = spec.shape
+    ax_fr = np.arange(0, len0)
+    spec_db = 20 * np.log10(np.maximum(np.abs(spec), 10**-5))
+
+    im = ax_handle.imshow( spec_db,
+                    origin  = 'lower',
+                    cmap    = 'pink_r',
+                    aspect  = 'auto',
+                    vmin    = db_lim[0],
+                    vmax    = db_lim[1],
+                    extent  = [0 , ax_fr.max(), 0 , sample_rate >> 1])
+
+    if label_frame is not None:
+        ax_handle.plot(label_frame * (sample_rate >> 2))
+    ax_handle.set_ylim([0, sample_rate >> 1])
+    ax_handle.set_xlim([0, 1200])
+
+    my_colorbar(ax_handle, im)
+
+    # Draw the tfmask
+    ax_handle = plt.subplot(4,1,2)
+    len_feat, len0 = tfmask.shape
+    ax_fr = np.arange(0,len0)
+
+    im = ax_handle.imshow(
+            tfmask,
+            origin  = 'lower',
+            cmap    = 'pink_r',
+            aspect  = 'auto',
+            vmin    = 0,
+            vmax    = tfmask.max(),
+            extent  = [0 , ax_fr.max(), 0 , len_feat])
+
+    ax_handle.set_ylim([0, len_feat])
+    ax_handle.set_xlim([0, 1200])
+    my_colorbar(ax_handle, im)
+    if label_frame is not None:
+        ax_handle.plot(label_frame * 20)
+
+    # Draw the spectrogram
+    ax_handle = plt.subplot(4,1,3)
+    _, len0 = spec.shape
+    ax_fr = np.arange(0, len0)
+    spec_db = 20 * np.log10(np.maximum(np.abs(spec*tfmask), 10**-5))
+
+    im = ax_handle.imshow( spec_db,
+                    origin  = 'lower',
+                    cmap    = 'pink_r',
+                    aspect  = 'auto',
+                    vmin    = db_lim[0],
+                    vmax    = db_lim[1],
+                    extent  = [0 , ax_fr.max(), 0 , sample_rate >> 1])
+
+    if label_frame is not None:
+        ax_handle.plot(label_frame * (sample_rate >> 2))
+    ax_handle.set_ylim([0, sample_rate >> 1])
+    ax_handle.set_xlim([0, 1200])
+    my_colorbar(ax_handle, im)
+
+
+    # Draw the spectrogram
+    ax_handle = plt.subplot(4,1,4)
+    _, len0 = spec.shape
+    ax_fr = np.arange(0, len0)
+    spec_db = 20 * np.log10(np.maximum(np.abs(spec_s), 10**-5))
+
+    im = ax_handle.imshow( spec_db,
+                    origin  = 'lower',
+                    cmap    = 'pink_r',
+                    aspect  = 'auto',
+                    vmin    = db_lim[0],
+                    vmax    = db_lim[1],
+                    extent  = [0 , ax_fr.max(), 0 , sample_rate >> 1])
+
+    if label_frame is not None:
+        ax_handle.plot(label_frame * (sample_rate >> 2))
+    ax_handle.set_ylim([0, sample_rate >> 1])
+    ax_handle.set_xlim([0, 1200])
+    my_colorbar(ax_handle, im)
     if print_name:
         fig = plt.gcf()
         fig.set_size_inches((8.5, 11), forward=False)

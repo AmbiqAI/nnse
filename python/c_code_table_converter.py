@@ -11,7 +11,14 @@ from nnsp_pack import c_weight_man
 from nnsp_pack.nn_module import NeuralNetClass
 from nnsp_pack.load_nn_arch import load_nn_arch, setup_nn_folder
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-
+from data_se import params_audio as PARAMS_AUDIO
+# PARAMS_AUDIO = {
+#     'win_size'      : 480,
+#     'hop'           : 160,
+#     'len_fft'       : 512,
+#     'sample_rate'   : 16000,
+#     'nfilters_mel'  : 40
+# }
 def float2fix(data_in, nfrac, bitwidth):
     """
     Floating point to int
@@ -175,7 +182,9 @@ def converter(  net_tf,
                 nn_id = 0,
                 nn_name = 'nn_model',
                 make_c_table = True,
-                arm_M4 = True):
+                folder_c = ".",
+                arm_M4 = True,
+                num_dnsampl=1):
     """
     Convert tensor in NN to c code
     """
@@ -187,25 +196,44 @@ def converter(  net_tf,
     net_tf.quantized_weight()
     net_np = tf2np(net_tf)
     if make_c_table:
-        fname_inc = f'../evb/src/def_nn{nn_id}_{nn_name}.h'
+        # fname_inc = f'../evb/src/def_nn{nn_id}_{nn_name}.h'
+        fname_inc = f'{folder_c}/def_nn{nn_id}_{nn_name}.h'
         with open(fname_inc, 'w') as file: # pylint: disable=unspecified-encoding
             file.write(f'#ifndef __DEF_NN{nn_id}_{nn_name.upper()}__\n')
             file.write(f'#define __DEF_NN{nn_id}_{nn_name.upper()}__\n')
             file.write('#include <stdint.h>\n')
             file.write('#include "neural_nets.h"\n')
+            file.write('#include "nn_speech.h"\n')
             file.write(f'extern const int32_t feature_mean_{nn_name}[];\n')
             file.write(f'extern const int32_t feature_stdR_{nn_name}[];\n')
             file.write(f'extern NeuralNetClass net_{nn_name};\n' )
+            file.write(f'extern PARAMS_NNSP params_nn{nn_id}_{nn_name};\n' )
             file.write('#endif\n')
 
         #--------------Header-----------------#
-        fname_c = f'../evb/src/def_nn{nn_id}_{nn_name}.c'
+        # fname_c = f'../evb/src/def_nn{nn_id}_{nn_name}.c'
+        fname_c = f'{folder_c}/def_nn{nn_id}_{nn_name}.c'
         with open(fname_c, 'w') as file: # pylint: disable=unspecified-encoding
             file.write('#include <stdint.h>\n')
             file.write('#include "neural_nets.h"\n')
             file.write('#include "activation.h"\n')
             file.write('#include "affine.h"\n')
             file.write('#include "lstm.h"\n')
+            file.write('#include "nn_speech.h"\n')
+            file.write(f"extern const int16_t stft_win_coeff_w{PARAMS_AUDIO['win_size']}_h{PARAMS_AUDIO['hop']}[];\n") # pylint: disable=line-too-long
+            file.write(f"PARAMS_NNSP params_nn{nn_id}_{nn_name} = {{\n")
+            file.write(f"\t.samplingRate = {PARAMS_AUDIO['sample_rate']},\n")
+            file.write(f"\t.fftsize = {PARAMS_AUDIO['len_fft']},\n")
+            file.write(f"\t.winsize_stft = {PARAMS_AUDIO['win_size']},\n")
+            file.write(f"\t.hopsize_stft = {PARAMS_AUDIO['hop']},\n")
+            file.write(f"\t.num_mfltrBank = {PARAMS_AUDIO['nfilters_mel']},\n")
+            file.write(f"\t.num_dnsmpl = {num_dnsampl},\n")
+            file.write(f"\t.pt_stft_win_coeff = stft_win_coeff_w{PARAMS_AUDIO['win_size']}_h{PARAMS_AUDIO['hop']},\n") # pylint: disable=line-too-long
+            file.write("\t.start_bin = 0,\n")
+            file.write("\t.is_dcrm = 1,\n")
+            file.write("\t.pre_gain_q8 = 3840, // q8\n")
+            file.write('};\n')
+
             #-----------------stats---------------------------------
             file.write('/*************stats***********/\n')
             file.write(f'const int32_t feature_mean_{nn_name}[] = {{')
@@ -415,9 +443,10 @@ def main(args):
     nn_arch         = args.nn_arch
     nn_name         = args.net_name
     nn_id           = int(args.net_id)
+    folder_c        = args.folder_c
 
-    out = load_nn_arch(nn_arch)
-    neurons, _, layer_types, activations, num_context, num_dnsampl = out
+    out = load_nn_arch(f"{nn_arch}.txt")
+    neurons, _, layer_types, activations, num_context, num_dnsampl, scalar_output, len_filter, len_lookahead = out # pylint: disable=line-too-long
     folder_nn = setup_nn_folder(nn_arch)
     nn_infer = NeuralNetClass(
         neurons     = neurons,
@@ -432,14 +461,17 @@ def main(args):
 
     nn_infer.quantized_weight()
 
-    with open(os.path.join(folder_nn,'stats.pkl'), "rb") as file:
+    with open(os.path.join(f"{folder_nn}",'stats.pkl'), "rb") as file:
         stats = pickle.load(file)
     _, fname_inc, fname_c = converter(
             nn_infer,
             stats,
             nn_name = nn_name,
             nn_id   = nn_id,
-            arm_M4  = True)
+            folder_c= folder_c,
+            arm_M4  = True,
+            num_dnsampl=num_dnsampl
+            )
 
     print(f'\nweight table is generated in \n{fname_inc}\n{fname_c}')
 
@@ -451,12 +483,12 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch72_mel.txt',
+        default='nn_arch/def_se_nn_arch72_mel',
         help='nn architecture')
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 295,
+        default= 50,
         help='starting epoch')
 
     argparser.add_argument(
@@ -465,8 +497,14 @@ if __name__ == "__main__":
         help='starting epoch')
 
     argparser.add_argument(
+        '--folder_c',
+        default= "../evb/src",
+        type=str,
+        help='C folder')
+
+    argparser.add_argument(
         '--net_name',
-        default= 'kws_galaxy',
+        default= 'se1',
         help='starting epoch')
 
     main(argparser.parse_args())

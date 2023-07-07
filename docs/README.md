@@ -97,5 +97,5 @@ nnse/ # root
     README.md 
 ```
 <p align="center">
-  Table 1: Illustration of the NNSE folder
+  Table 1: Directory contents of NNSE
 </p>

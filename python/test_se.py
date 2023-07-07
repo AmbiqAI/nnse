@@ -14,6 +14,7 @@ from nnsp_pack.pyaudio_animation import AudioShowClass
 from nnsp_pack.nn_infer import NNInferClass
 from nnsp_pack.stft_module import stft_class
 from data_se import params_audio as PARAM_AUDIO
+from nnsp_pack.basic_dsp import dc_remove
 
 SHOW_HISTOGRAM  = False
 NP_INFERENCE    = False
@@ -60,7 +61,7 @@ class SeClass(NNInferClass):
         file = wave.open(f"{result_folder}/output_{fname}", "wb")
         file.setnchannels(2)
         file.setsampwidth(2)
-        file.setframerate(16000)
+        file.setframerate(params_audio['sample_rate'])
 
         bks = int(len(data) / params_audio['hop'])
         feats   = []
@@ -68,11 +69,14 @@ class SeClass(NNInferClass):
         tfmasks =[]
         stft_inst = stft_class()
         stft_inst.reset()
-
+        data_frame = np.ones((160,),dtype=np.float64) * 2**-15
+        data_freq = stft_inst.stft_frame_proc(data_frame)
+        data_freq_stack = [data_freq.copy() for i in range(self.len_filter)]
         for i in range(bks):
             data_frame = data[i*params_audio['hop'] : (i+1) * params_audio['hop']]
             data_freq = stft_inst.stft_frame_proc(data_frame)
-
+            data_freq_stack.pop(0)
+            data_freq_stack += [data_freq]
             if NP_INFERENCE:
                 feat, spec, est = self.frame_proc_np(data_frame, return_all = True)
             else:
@@ -83,9 +87,10 @@ class SeClass(NNInferClass):
             self.count_run = (self.count_run + 1) % self.num_dnsampl
             print(f"\rprocessing frame {i}", end='')
             out = stft_inst.istft_frame_proc(
-                    data_freq,
-                    tfmask = est,
-                    min_tfmask = 0)
+                    data_freq_stack,
+                    tfmask          = est,
+                    min_tfmask      = 0,
+                    len_lookahead   = self.len_lookahead)
             out = np.array([data_frame, out]).T.flatten()
             out = np.floor(out * 2**15).astype(np.int16)
             file.writeframes(out.tobytes())
@@ -95,13 +100,15 @@ class SeClass(NNInferClass):
         specs   = np.array(specs)
 
         fig_name = re.sub(r'\.wav', '.pdf', fname)
+
         display_stft_tfmask(
             data,
             specs.T,
             feats.T,
             tfmasks.T,
-            sample_rate=16000,
+            sample_rate=params_audio['sample_rate'],
             print_name=f"{result_folder}/output_{fig_name}")
+
         file.close()
 
         data, samplerate = sf.read(f"{result_folder}/output_{fname}")
@@ -127,12 +134,15 @@ def main(args):
     data, sample_rate = sf.read(wavefile)
     if data.ndim > 1:
         data=data[:,0]
-        if sample_rate > 16000:
-            data = librosa.resample(
-                    data,
-                    orig_sr=sample_rate,
-                    target_sr=16000)
-    sd.play(data, 16000)
+
+    if sample_rate > PARAM_AUDIO['sample_rate']:
+        data = librosa.resample(
+                data,
+                orig_sr=sample_rate,
+                target_sr=PARAM_AUDIO['sample_rate'])
+
+    data = dc_remove(data)
+    sd.play(data, PARAM_AUDIO['sample_rate'])
 
     se_inst = SeClass(
             args.nn_arch,
@@ -141,7 +151,7 @@ def main(args):
             quantized,
             show_histogram  = SHOW_HISTOGRAM,
             np_inference    = NP_INFERENCE,
-            feat_type       = args.feat_type
+            feat_type       = args.feat_type,
             )
 
     se_inst.blk_proc(data, wavefile=wavefile)
@@ -173,19 +183,19 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-v',
         '--test_wavefile',
-        default = 'test_wavs/speech.wav',
+        default = 'test_wavs/i_like_steak.wav',
         help    = 'The wavfile name to be tested')
 
     argparser.add_argument(
         '-q',
         '--quantized',
-        default = True,
+        default = False,
         type=bool,
         help='is post quantization?')
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 62, # 70
+        default= 50, # 70
         help='starting epoch')
 
     main(argparser.parse_args())

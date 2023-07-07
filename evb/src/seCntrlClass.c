@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include "feature_module.h"
 #include "def_nn3_se.h"
-#include "PcmBufClass.h"
+// #include "PcmBufClass.h"
 #include "nn_speech.h"
 #include "seCntrlClass.h"
 #include "ParamsNNCntrl.h"
@@ -16,7 +16,7 @@ NNSPClass NNSP_INST; //10ms
 
 FeatureClass FEAT_INST;
 
-PcmBufClass PCMBUF_INST;
+// PcmBufClass PCMBUF_INST;
 
 void seCntrlClass_init(
         seCntrlClass *pt_inst) {
@@ -33,7 +33,7 @@ void seCntrlClass_init(
     pt_inst->Params.thresh_prob_s2i      = THRESHOLD_MASK_S2IRNN;
     pt_inst->Params.thresh_cnts_s2i      = THRESHOLD_CNTS_S2IRNN;
 
-    PcmBufClass_init(&PCMBUF_INST);
+    // PcmBufClass_init(&PCMBUF_INST);
 
     NNSPClass_init(
         (NNSPClass*) pt_inst->pt_nnsp,
@@ -44,8 +44,7 @@ void seCntrlClass_init(
         feature_stdR_se,
         &pt_inst->Params.thresh_prob_s2i,
         &pt_inst->Params.thresh_cnts_s2i,
-        72,
-        1);
+        &params_nn3_se);
 }
 
 void seCntrlClass_reset(seCntrlClass *pt_inst) {
@@ -55,7 +54,7 @@ void seCntrlClass_reset(seCntrlClass *pt_inst) {
         Inputs:
                 pt_inst:  instance pointer
     */
-    PcmBufClass_reset(&PCMBUF_INST);
+    // PcmBufClass_reset(&PCMBUF_INST);
 
     NNSPClass_reset((NNSPClass*) pt_inst->pt_nnsp);
 
@@ -72,18 +71,18 @@ void seCntrlClass_exec(
                 pt_inst : instance pointer
                 indata  : frame data    
     */
-    static int16_t pcmbuf_chunk[SAMPLES_FRM_NNCNTRL_CLASS];
+    // static int16_t pcmbuf_chunk[SAMPLES_FRM_NNCNTRL_CLASS];
     NNSPClass *pt_nnsp = (NNSPClass*) pt_inst->pt_nnsp;
     int16_t detected = 0;
 
-    PcmBufClass_setData(&PCMBUF_INST, data_fr); // put data to voice buffer
-    PcmBufClass_getData(
-            &PCMBUF_INST,
-            0,
-            1, 
-            pcmbuf_chunk); // fetch input data to NN from voice bufffer
+    // PcmBufClass_setData(&PCMBUF_INST, data_fr); // put data to voice buffer
+    // PcmBufClass_getData(
+    //         &PCMBUF_INST,
+    //         0,
+    //         1, 
+    //         pcmbuf_chunk); // fetch input data to NN from voice bufffer
 
-    detected = NNSPClass_exec(pt_nnsp, pcmbuf_chunk); 
+    detected = NNSPClass_exec(pt_nnsp, data_fr); 
     for (int i = 0; i < SAMPLES_FRM_NNCNTRL_CLASS; i++)
         se_output[i] = pt_nnsp->pt_se_out[i];
     

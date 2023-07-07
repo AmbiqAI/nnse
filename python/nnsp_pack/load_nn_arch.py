@@ -22,7 +22,11 @@ def load_nn_arch(filename):
 
     with open(filename, 'r') as file: # pylint: disable=unspecified-encoding
         lines = file.readlines()
-
+    try:
+        scalar_output = nn_search(('scalar_output'), lines, dtype=float)[0]
+    except:
+        scalar_output = 1.0
+    
     size_neurons = nn_search(('layer_neurons', 'num_filters'), lines, dtype=int)
     tmp = nn_search(('input_neurons'), lines, dtype=int)
     size_neurons = tmp + size_neurons
@@ -34,18 +38,29 @@ def load_nn_arch(filename):
         num_context = nn_search(('kernel_size'), lines, dtype=int)[0]
     except:
         num_context = 1
+
     try:
         num_dnsampl = nn_search(('strides'), lines, dtype=int)[0]
     except:
         num_dnsampl = 1
 
+    try:
+        len_filter = nn_search(('len_filter'), lines, dtype=int)[0]
+    except:
+        len_filter = 1
+
+    try:
+        len_lookahead = nn_search(('len_lookahead'), lines, dtype=int)[0]
+    except:
+        len_lookahead = 1
+    size_neurons[-1] *= len_filter
     print(f"\nLoad nn_arch={filename}:")
     print("neurons:", size_neurons)
     print("Dropout probs:", dropprobs)
     print("Layer types:", layer_types)
     print("Activations:", activations, '\n')
 
-    return size_neurons, dropprobs, layer_types, activations, num_context, num_dnsampl
+    return size_neurons, dropprobs, layer_types, activations, num_context, num_dnsampl, scalar_output, len_filter, len_lookahead
 
 def setup_nn_folder(nn_arch_name):
     """

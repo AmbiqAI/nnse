@@ -1,5 +1,5 @@
 """
-Training script for s2i RNN
+Training script for SE RNN
 """
 import os
 import re
@@ -15,13 +15,14 @@ from nnsp_pack.loss_functions import loss_mse
 from nnsp_pack.converter_fix_point import fakefix_tf
 from nnsp_pack.calculate_feat_stats_se_split import feat_stats_estimator
 from nnsp_pack.load_nn_arch import load_nn_arch, setup_nn_folder
-from nnsp_pack.tf_basic_math import tf_log10_eps, tf_power_eps
+from nnsp_pack.tf_basic_math import tf_log10_eps
 import c_code_table_converter
 
 SHOW_STEPS          = False
-DISPLAY_HISTOGRAM   = True
+DISPLAY_HISTOGRAM   = False
 BLOCKS_PER_AUDIO    = 5
 DIM_TARGET          = 257
+PI                  = 3.1415926
 physical_devices    = tf.config.list_physical_devices('GPU')
 
 try:
@@ -44,7 +45,9 @@ def train_kernel(
         net,
         optimizer,
         training    = True,
-        quantized   = False):
+        quantized   = False,
+        len_filter = 1,
+        len_lookahead=0):
     """
     Training kernel
     """
@@ -58,16 +61,16 @@ def train_kernel(
 
         amp_sn = tf.math.sqrt(pspec_sn)
         amp_s  = tf.math.sqrt(pspec_s)
-
         ave_loss, steps = loss_mse(
-                tf_power_eps(amp_s),        # clean
-                tf_power_eps(amp_sn * est), # noisy * mask
-                masking = mask)
+                amp_s,        # clean
+                amp_sn * est, # noisy * mask
+                mask,
+                exp=0.6)
 
     if training:
         gradients = tape.gradient(ave_loss, net.trainable_variables)
 
-        gradients_clips = [ tf.clip_by_norm(grad, 1)
+        gradients_clips = [ grad
                             for grad in gradients ]
 
         optimizer.apply_gradients(
@@ -90,7 +93,9 @@ def epoch_proc(
         num_dnsampl     = 1,
         num_context     = 6,
         quantized       = False,
-        feat_type       = 'mel'):
+        feat_type       = 'mel',
+        len_filter      = 1,
+        len_lookahead = 0):
     """
     Training for one epoch
     """
@@ -133,11 +138,13 @@ def epoch_proc(
                     net,
                     optimizer,
                     training    = training,
-                    quantized   = quantized)
+                    quantized   = quantized,
+                    len_filter  = len_filter,
+                    len_lookahead = len_lookahead)
 
             _, states, ave_loss, steps = tmp
 
-        net.update_cost_steps(ave_loss, steps)
+            net.update_cost_steps(ave_loss, steps)
 
         if batch % BLOCKS_PER_AUDIO == (BLOCKS_PER_AUDIO-1):
             tf.print(f"\r {int(batch / 5)}/{total_batches}: ",
@@ -208,8 +215,7 @@ def main(args):
     optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate)
 
     arch = load_nn_arch(args.nn_arch)
-    neurons, drop_rates, layer_types, activations, num_context, num_dnsampl = arch
-
+    neurons, drop_rates, layer_types, activations, num_context, num_dnsampl, scalar_output, len_filter, len_lookahead = arch # pylint: disable=line-too-long
     folder_nn = setup_nn_folder(args.nn_arch)
 
     dim_feat = neurons[0]
@@ -222,7 +228,8 @@ def main(args):
         batchsize   = batchsize,
         nDownSample = num_dnsampl,
         kernel_size = num_context,
-        dim_target  = DIM_TARGET)
+        dim_target  = DIM_TARGET,
+        scalar_output = scalar_output)
 
     nn_infer = NeuralNetClass(
         neurons     = neurons,
@@ -231,7 +238,8 @@ def main(args):
         batchsize   = batchsize,
         nDownSample = num_dnsampl,
         kernel_size = num_context,
-        dim_target  = DIM_TARGET)
+        dim_target  = DIM_TARGET,
+        scalar_output = scalar_output)
 
     if epoch_loaded == 'random':
         epoch_loaded = -1
@@ -288,8 +296,8 @@ def main(args):
                 print(f'Can not find the list {tfrecord_list[tr_set]}')
             else:
                 len0 = int(len(lines) / batchsize) * batchsize
-                # len0 = batchsize * 10
                 fnames[tr_set] = [line.strip() for line in lines[:len0]]
+                fnames[tr_set] = filter_in_data(fnames[tr_set])
 
     _, dataset = tfrecords_pipeline(
             fnames['train'],
@@ -344,7 +352,9 @@ def main(args):
                 num_dnsampl     = num_dnsampl,
                 num_context     = num_context,
                 quantized       = quantized,
-                feat_type       = args.feat_type)
+                feat_type       = args.feat_type,
+                len_filter      = len_filter,
+                len_lookahead   = len_lookahead)
 
         nn_train.duplicated_to(
                 nn_infer,
@@ -352,7 +362,7 @@ def main(args):
 
         # Computing Training loss
         epoch_proc(
-            nn_infer,
+            nn_train,
             optimizer,
             dataset_tr,
             fnames['train'],
@@ -365,16 +375,18 @@ def main(args):
             num_dnsampl     = num_dnsampl,
             num_context     = num_context,
             quantized       = quantized,
-            feat_type       = args.feat_type)
+            feat_type       = args.feat_type,
+            len_filter      = len_filter,
+            len_lookahead   = len_lookahead)
 
-        loss['train'][epoch] = nn_infer.stats['acc_loss'] / nn_infer.stats['acc_steps']
-        loss['train'][epoch] /= nn_infer.neurons[-1]
+        loss['train'][epoch] = nn_train.stats['acc_loss'] / nn_train.stats['acc_steps']
+        loss['train'][epoch] /= nn_train.neurons[-1]
 
-        acc['train'][epoch] = nn_infer.stats['acc_matchCount'] / nn_infer.stats['acc_steps']
+        acc['train'][epoch] = nn_train.stats['acc_matchCount'] / nn_train.stats['acc_steps']
 
         # Computing Testing loss
         epoch_proc(
-            nn_infer,
+            nn_train,
             optimizer,
             dataset_te,
             fnames['test'],
@@ -387,12 +399,14 @@ def main(args):
             num_dnsampl         = num_dnsampl,
             num_context         = num_context,
             quantized           = quantized,
-            feat_type           = args.feat_type)
+            feat_type           = args.feat_type,
+            len_filter          = len_filter,
+            len_lookahead       = len_lookahead)
 
-        loss['test'][epoch] = nn_infer.stats['acc_loss'] / nn_infer.stats['acc_steps']
-        loss['test'][epoch] /= nn_infer.neurons[-1]
+        loss['test'][epoch] = nn_train.stats['acc_loss'] / nn_train.stats['acc_steps']
+        loss['test'][epoch] /= nn_train.neurons[-1]
 
-        acc['test'][epoch] = nn_infer.stats['acc_matchCount'] / nn_infer.stats['acc_steps']
+        acc['test'][epoch] = nn_train.stats['acc_matchCount'] / nn_train.stats['acc_steps']
 
         nn_train.save_weights(f'{folder_nn}/checkpoints/model_checkpoint_ep{epoch}')
 
@@ -402,6 +416,31 @@ def main(args):
             pickle.dump(acc, file)
 
         tf.print('Epoch spent ', tf_round(tf.timestamp() - t_start), ' seconds')
+        print(f"(train) best epoch picked by loss = {np.argmin(loss['train'][0: epoch+1])}")
+        print(f"(test)  best epoch picked by loss = {np.argmin(loss['test'][0: epoch+1])}")
+
+def filter_in_data(fnames):
+    """_summary_
+
+    Args:
+        fnames (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    ntypes = [
+            'ESC-50-MASTER',
+            'wham_noise',
+            'FSD50K',
+            'musan',
+        ]
+    fnames_out=[]
+    for fname in fnames:
+        for ntype in ntypes:
+            if re.search(fr"{ntype}", fname):
+                fnames_out+=[fname]
+                break
+    return fnames_out
 
 if __name__ == "__main__":
 
@@ -414,7 +453,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch.txt',
+        default='nn_arch/def_se_nn_arch72_mel.txt',
         help='nn architecture')
 
     argparser.add_argument(
@@ -459,7 +498,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-l',
         '--learning_rate',
-        default = 4 * 10**-4,
+        default =  4 * 10**-4,
         type=float,
         help='learning rate')
 

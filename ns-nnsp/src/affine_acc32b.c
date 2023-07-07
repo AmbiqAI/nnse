@@ -6,7 +6,9 @@
 #include "extern_files.h"
 #endif
 #include "affine_acc32b.h"
+#if ARM_OPTIMIZED == 1
 #include <cmsis_gcc.h>
+#endif
 int32_t accumulators_32b[4] = { 0, 0, 0, 0 };
 #if ARM_OPTIMIZED == 1
 int affine_Krows_8x16_acc32b(
@@ -179,45 +181,65 @@ int affine_Krows_8x16_acc32b(
 			sum1 += (int32_t) *p_kernel++ * (int32_t)in;
 		}
 		else // if (dim_output==1)
-		{
 			sum0 += (int32_t) *p_kernel++ * (int32_t)in;
-		}
+
+
 	}
 
-	if (dim_output == 4)
+	shift = qbit_s - (qbit_input + qbit_kernel);
+	shift_32b(pt_accum, shift, dim_output); // align acc to w
+
+	
+	if (p_bias != 0)
+	{
+		shift = qbit_s - (qbit_bias);
+		// align w to acc & add
+		if (dim_output==4)
+		{
+			sum0 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+			sum1 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+			sum2 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+			sum3 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+		}
+		else if (dim_output==3)
+		{
+			sum0 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+			sum1 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+			sum2 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+		}
+		else if (dim_output==2)
+		{
+			sum0 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+			sum1 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+		}
+		else // if (dim_output==1)
+		{
+			sum0 += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
+		}
+
+	}
+
+	if (dim_output==4)
 	{
 		pt_accum[0] = sum0;
 		pt_accum[1] = sum1;
 		pt_accum[2] = sum2;
 		pt_accum[3] = sum3;
 	}
-	else if (dim_output == 3)
+	else if (dim_output==3)
 	{
 		pt_accum[0] = sum0;
 		pt_accum[1] = sum1;
 		pt_accum[2] = sum2;
 	}
-	else if (dim_output == 2)
+	else if (dim_output==2)
 	{
 		pt_accum[0] = sum0;
 		pt_accum[1] = sum1;
 	}
-	else if (dim_output == 1)
+	else // if (dim_output==1)
 	{
 		pt_accum[0] = sum0;
-	}
-
-	shift = qbit_s - (qbit_input + qbit_kernel);
-	shift_32b(pt_accum, shift, dim_output); // align acc to w
-
-	if (p_bias != 0)
-	{
-		shift = qbit_s - (qbit_bias);
-		// align w to acc & add
-		for (i = 0; i < dim_output; i++)
-		{
-			pt_accum[i] += (shift >= 0) ? ((int32_t)*p_bias++) << shift : ((int32_t)*p_bias++) >> -shift;
-		}
 	}
 
 	if (is_out)
@@ -232,10 +254,11 @@ int affine_Krows_8x16_acc32b(
 		po = (int16_t*)(*act)(po, acc32, dim_output);
 		*pp_output = po;
 	}
-	*pp_kernel 	= p_kernel;
-	*pp_bias 	= p_bias;
+	*pp_kernel = p_kernel;
+	*pp_bias = p_bias;
 	
 	return 0;
+
 }
 #else
 int affine_Krows_8x16_acc32b(

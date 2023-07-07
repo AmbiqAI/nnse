@@ -32,8 +32,7 @@ class NNInferClass:
         self.feat_type = feat_type
         out = load_nn_arch(nn_arch)
 
-        neurons, _, layer_types, activations, num_context, self.num_dnsampl = out
-
+        neurons, _, layer_types, activations, num_context, self.num_dnsampl, self.scalar_output, self.len_filter, self.len_lookahead = out
         folder_nn = setup_nn_folder(nn_arch)
 
         nn_infer = NeuralNetClass(
@@ -42,7 +41,8 @@ class NNInferClass:
             activations = activations,
             batchsize   = 1,
             nDownSample = self.num_dnsampl,
-            kernel_size = num_context)
+            kernel_size = num_context,
+            scalar_output = self.scalar_output)
 
         nn_infer.load_weights(
                 f'{folder_nn}/checkpoints/model_checkpoint_ep{epoch_loaded}' )
@@ -160,13 +160,21 @@ class NNInferClass:
         spec, _, feat, pspec = self.feature_inst.frame_proc(data)
         if self.feat_type=='pspec':
             feat = log10_fakeFix(pspec)
-        feat = fakefix((feat - self.stats['nMean_feat']) * self.stats['nInvStd'], 16, 8)
+            feat = fakefix(np.log10(pspec+2**-15), 32, 15)
+        mean = self.stats['nMean_feat']
+        invstd = self.stats['nInvStd']
+        feat = fakefix(
+            (feat - mean) * invstd,
+            16, 8)
         self.feats = self.feats[1:]
-        self.feats = np.concatenate((self.feats, np.expand_dims(feat, axis=0)), axis=0)
+        self.feats = np.concatenate(
+            (self.feats, np.expand_dims(feat, axis=0)),
+            axis=0)
         return feat, spec
 
-    def frame_proc_tf(self, data,
-                    return_all=False):
+    def frame_proc_tf(
+            self, data,
+            return_all=False):
         """
         NN frame process using tensorflow
         """
@@ -174,8 +182,11 @@ class NNInferClass:
         feats_expand = np.expand_dims(self.feats, axis=0)
 
         if self.count_run == 0:
-
-            est, self.states = self.nn_infer(feats_expand, 1.0, self.states, training=False)
+            est, self.states = self.nn_infer(
+                feats_expand,
+                1.0,
+                self.states,
+                training=False)
             est = est[0,0].numpy()
             self.post_nn_infer(est)
         if return_all:

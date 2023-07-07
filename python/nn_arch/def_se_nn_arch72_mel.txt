@@ -15,12 +15,12 @@ dropprob 0.25
 
 layer_type fc
 layer_neurons 72
-activation relu6
+activation tanh
 dropprob 0.25
 
 layer_type fc
 layer_neurons 72
-activation relu6
+activation tanh
 dropprob 0.25
 
 layer_type fc

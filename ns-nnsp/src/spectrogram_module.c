@@ -8,23 +8,29 @@
 #else
 #include "fft_arm.h"
 #endif
-
+int16_t dataBuffer[LEN_FFT_NNSP];
+int32_t odataBuffer[LEN_FFT_NNSP];
+int32_t glob_spec[1026];
 int32_t glob_fft_buf[LEN_FFT_NNSP << 1];
 
-extern const int16_t len_stft_win_coeff;
-extern const int16_t hop;
-extern const int16_t stft_win_coeff[];
-int stftModule_construct(stftModule *ps)
+int stftModule_construct(
+	stftModule *ps,
+	int16_t len_win,
+	int16_t hopsize,
+	int16_t fftsize,
+	const int16_t *pt_stft_win_coeff)
 {
-	ps->len_win = len_stft_win_coeff;
-	ps->hop = hop;
-	ps->len_fft = LEN_FFT_NNSP;
-	ps->window = stft_win_coeff;
+	ps->spec = glob_spec;
+	ps->dataBuffer = dataBuffer;
+	ps->odataBuffer = odataBuffer;
+	ps->len_win = len_win;
+	ps->hop = hopsize;
+	ps->len_fft = fftsize;
+	ps->window = pt_stft_win_coeff;
 #if ARM_FFT==1
-	arm_fft_init(&ps->fft_st,  0);
-	arm_fft_init(&ps->ifft_st, 1);	
-#endif
-	
+	arm_fft_init(&ps->fft_st,  0, fftsize);
+	arm_fft_init(&ps->ifft_st, 1, fftsize);
+#endif	
 	return 0;
 }
 
@@ -88,12 +94,13 @@ int stftModule_analyze(
 void spec2pspec_arm(
 		int32_t* pspec, // q15
 		int32_t* spec, 	// q21
-		int len)
+		int len,
+		int16_t qbit_in)
 {
 	int i;
 	int64_t acc, tmp_t;
 	int32_t *pt_spec = spec;
-	int rshift = (21 << 1) - 15;
+	int rshift = (qbit_in << 1) - 15;
 
 	for (i = 0; i < len; i++)
 	{
@@ -101,7 +108,7 @@ void spec2pspec_arm(
 		tmp_t = (int64_t) *pt_spec++;
 		acc = tmp_t * tmp_t;
 		tmp_t = (int64_t) *pt_spec++;
-		acc = tmp_t * tmp_t;
+		acc += tmp_t * tmp_t;
 		pspec[i] = (int32_t) MIN(MAX(acc >> rshift, INT32_MIN), INT32_MAX);
 	}
 }
@@ -113,7 +120,9 @@ void spec2pspec_arm(
 int stftModule_analyze_arm(
 		void* ps_t,
 		int16_t* fft_in_q16, 	// q15
-		int32_t* spec) 			// q21
+		int32_t* spec,			// q21
+		int16_t fftsize,		
+		int16_t* pt_qbit_out) 			
 {
 	int i;
 	int32_t tmp;
@@ -141,7 +150,10 @@ int stftModule_analyze_arm(
 		&ps->fft_st,
 		spec, 			// fft_out, Q21
 		glob_fft_buf); 	// fft_in,  Q30 
-
+	if (fftsize == 512)
+		*pt_qbit_out = 21;
+	else
+		*pt_qbit_out = 22;
 	return 0;
 }
 
@@ -187,5 +199,4 @@ int stftModule_synthesize_arm(
 
 	return 0;
 }
-
 #endif

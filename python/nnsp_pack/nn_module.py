@@ -20,7 +20,8 @@ class NeuralNetClass(tf.keras.Model):
                  neurons                = [10] * 10,
                  dropRates              = [0] * 10,
                  dropRates_recurrent    = [0] * 10,
-                 dim_target = 7):
+                 dim_target = 7,
+                 scalar_output = 1.0):
 
         super(NeuralNetClass, self).__init__()
         self.kernel_size = kernel_size
@@ -44,13 +45,12 @@ class NeuralNetClass(tf.keras.Model):
                         'bias'  : [None] * self.num_layers }
         self.h_states = [None] * len(self.layer_types)
         self.c_states = [None] * len(self.layer_types)
-
+        self.scalar_output = scalar_output
 
         for i in range(self.num_layers):
             self.nfracs['kernel'][i] =  tf.Variable(12, dtype = tf.float32, trainable = False)
             self.nfracs['bias'][i] =  tf.Variable(12, dtype = tf.float32, trainable = False)
         for i, neuron in enumerate(neurons[1:]):
-
             layer_type = layer_types[i]
             kernel_initializer = self.weight_initializer(
                                         neurons[i],
@@ -70,11 +70,22 @@ class NeuralNetClass(tf.keras.Model):
                         kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer),
                         input_shape = (None, neurons[i], 1)) # (time, dim_feat, ch)
 
+            elif layer_type == 'conv2d':
+                layer = layers.Conv2D(
+                        neuron,
+                        (kernel_size, kernel_size),
+                        padding     = 'valid',
+                        strides     = (self.nDownSample, 1), # downsampling 2 in timesteps dim
+                        activation  = activations[i],
+                        kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer),
+                        input_shape = (None, neurons[i], 1)) # (time, dim_feat, ch)
+
             elif layer_type == 'fc':
                 layer = layers.Dense(
                         neuron,
                         activation = activations[i],
-                        kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer))
+                        # kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer)
+                        )
 
             elif layer_type == 'lstm':
                 layer = layers.LSTM(
@@ -129,6 +140,11 @@ class NeuralNetClass(tf.keras.Model):
                 out = tf.expand_dims(out,3)
                 out = layer(out, training = training) # (batches, timesteps, 1, neurons[1])
                 out = out[:, :, 0, :]
+            elif self.layer_types[i] == 'conv2d':
+                out = tf.expand_dims(out,3)
+                out = layer(out, training = training) # (batches, timesteps, dim_feat, num_filters)
+                shape = out.shape
+                out = tf.reshape(out, [shape[0], shape[1],-1])
             elif self.layer_types[i] == 'lstm':
                 out, h_state, c_state = layer(
                                 out,
@@ -141,7 +157,7 @@ class NeuralNetClass(tf.keras.Model):
                 out = layer(out, training=training)
         states = (self.h_states, self.c_states)
         out *= mask
-
+        out *= self.scalar_output
         self.update_limited_quantizated(quantized)
         return out, states
 
@@ -187,6 +203,7 @@ class NeuralNetClass(tf.keras.Model):
         """
         Copy weight table from one net to the other.
         """
+        nn_duplx.scalar_output = self.scalar_output
         nn_duplx.layer_types = self.layer_types.copy()
         nn_duplx.activaitons = self.activaitons.copy()
         nn_duplx.neurons = self.neurons.copy()

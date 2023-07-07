@@ -85,6 +85,20 @@ def se_download():
     shutil.copyfile(
         'data/non_speech_esc50.csv',
         'wavs/noise/ESC-50-master/non_speech.csv')
+
+    # rirs_noises noise
+    target_name = 'rirs_noises.zip'
+    dst_folder = f'./{wavs}/noise/'
+    url = f'https://www.openslr.org/resources/28/{target_name}'
+    response = requests.get(url, stream=True)
+    print(f"Downloading {url}")
+    if response.status_code == 200:
+        with open(f"{wavs}/{target_name}", 'wb') as file:
+            file.write(response.raw.read())
+    print(f"extract {target_name}")
+    with ZipFile(f"{wavs}/{target_name}", 'r') as file:
+        file.extractall(dst_folder)
+
     # fsd50_lst = [
     #     "FSD50K.dev_audio.z01",
     #     "FSD50K.dev_audio.z02",
