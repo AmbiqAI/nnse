@@ -145,13 +145,18 @@ int16_t NNSPClass_exec(
     int8_t debug_layer = -1;
     int16_t *tmp;
     int16_t* pt_inputs;
-    for (int i = 0; i < 160; i++)
+    for (int i = 0; i < LEN_STFT_HOP; i++)
     {
         rawPCM[i] = (rawPCM[i] * (int16_t) pt_inst->pt_params->pre_gain_q1) >> 1;
     }
+
     if (pt_inst->pt_params->is_dcrm)
     {
-        IIR_CLASS_exec(pt_inst->pt_dcrm, input_tmp, rawPCM, 160);
+        IIR_CLASS_exec(
+            pt_inst->pt_dcrm,
+            input_tmp,
+            rawPCM,
+            LEN_STFT_HOP);
         pt_inputs = input_tmp;
     }
     else

@@ -8,8 +8,6 @@
 #else
 #include "fft_arm.h"
 #endif
-int16_t dataBuffer[LEN_FFT_NNSP];
-int32_t odataBuffer[LEN_FFT_NNSP];
 int32_t glob_spec[1026];
 int32_t glob_fft_buf[LEN_FFT_NNSP << 1];
 
@@ -21,8 +19,7 @@ int stftModule_construct(
 	const int16_t *pt_stft_win_coeff)
 {
 	ps->spec = glob_spec;
-	ps->dataBuffer = dataBuffer;
-	ps->odataBuffer = odataBuffer;
+
 	ps->len_win = len_win;
 	ps->hop = hopsize;
 	ps->len_fft = fftsize;

@@ -15,8 +15,8 @@ typedef struct
 	int16_t len_win;
 	int16_t hop;
 	int16_t len_fft;
-	int16_t *dataBuffer;
-	int32_t *odataBuffer;
+	int16_t dataBuffer[LEN_FFT_NNSP];
+	int32_t odataBuffer[LEN_FFT_NNSP];
 	const int16_t* window;
 #if ARM_FFT == 1
 	arm_rfft_instance_q31 fft_st;

@@ -33,7 +33,8 @@ void FeatureClass_construct(
 
 void FeatureClass_setDefault(FeatureClass* ps);
 
-void FeatureClass_execute(FeatureClass*ps,
-							int16_t* input);
+void FeatureClass_execute(
+		FeatureClass*ps,
+		int16_t* input);
 
 #endif
