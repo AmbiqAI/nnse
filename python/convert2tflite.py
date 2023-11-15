@@ -54,7 +54,10 @@ def model() -> tf.keras.Model:
             name="LSTM")
     return net
 
-def convert_model(model: tf.keras.Model, dataset_gen: Callable, nbit=8) -> bytes:
+def convert_model(
+        model: tf.keras.Model,
+        dataset_gen: Callable,
+        nbit: int = 8)-> bytes:
     """ tflite converter
 
     Args:
