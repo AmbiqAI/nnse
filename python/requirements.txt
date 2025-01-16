@@ -1,4 +1,4 @@
-tensorflow < 2.11
+tensorflow[and-cuda]== 2.15.1
 numpy
 librosa
 matplotlib
@@ -10,3 +10,4 @@ wandb
 pyaudio
 pyqt5
 scipy
+tqdm

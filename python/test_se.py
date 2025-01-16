@@ -55,6 +55,7 @@ class SeClass(NNInferClass):
         """
         NN process for several frames
         """
+
         result_folder = 'test_results'
         _, fname = os.path.split(wavefile)
         params_audio = self.params_audio
@@ -72,6 +73,7 @@ class SeClass(NNInferClass):
         data_frame = np.ones((160,),dtype=np.float64) * 2**-15
         data_freq = stft_inst.stft_frame_proc(data_frame)
         data_freq_stack = [data_freq.copy() for i in range(self.len_filter)]
+        
         for i in range(bks):
             data_frame = data[i*params_audio['hop'] : (i+1) * params_audio['hop']]
             data_freq = stft_inst.stft_frame_proc(data_frame)
@@ -86,6 +88,7 @@ class SeClass(NNInferClass):
             specs   += [spec]
             self.count_run = (self.count_run + 1) % self.num_dnsampl
             print(f"\rprocessing frame {i}", end='')
+
             out = stft_inst.istft_frame_proc(
                     data_freq_stack,
                     tfmask          = est,
@@ -164,13 +167,13 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--nn_arch',
-        default='nn_arch/def_se_nn_arch72_mel.txt',
+        default='nn_arch/def_se_nn_arch72_pspec_unet.txt',
         help='nn architecture')
 
     argparser.add_argument(
         '-ft',
         '--feat_type',
-        default='mel',
+        default='pspec',
         help='feature type: \'mel\'or \'pspec\'')
 
     argparser.add_argument(
@@ -195,7 +198,7 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '--epoch_loaded',
-        default= 50, # 70
+        default= 138, # 70
         help='starting epoch')
 
     main(argparser.parse_args())

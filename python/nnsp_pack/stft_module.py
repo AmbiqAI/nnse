@@ -49,6 +49,7 @@ class stft_class: # pylint: disable=invalid-name
         """
         len_filter=len(data_freq)
         data_freq = np.array(data_freq)
+
         if len(data_freq) == 1:
             data_freq = data_freq[0]
             data_freq = data_freq * np.maximum(tfmask, min_tfmask)

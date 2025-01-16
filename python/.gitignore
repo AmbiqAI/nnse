@@ -1,0 +1,6 @@
+# exclude everything except directory foo/bar
+models_trained/
+wavs/
+test_results/
+./venv/
+tmp/

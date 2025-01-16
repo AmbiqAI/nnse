@@ -76,11 +76,11 @@ class NNInferClass:
         self.feats_init = (self.feats_init - self.stats['nMean_feat']) * self.stats['nInvStd']
         self.feats_init = fakefix(self.feats_init, 16, 8)
         self.feats = self.feats_init
-        nn_np = c_code_table_converter.tf2np(nn_infer)
-        if self.show_histogram:
-            c_code_table_converter.draw_nn_hist(nn_np)
+        # nn_np = c_code_table_converter.tf2np(nn_infer)
+        # if self.show_histogram:
+        #     c_code_table_converter.draw_nn_hist(nn_np)
 
-        self.nn_np = nn_np
+        # self.nn_np = nn_np
         self.count_run = 0
 
         if self.np_inference:

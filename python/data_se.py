@@ -36,7 +36,7 @@ else:
     SNR_DBS = [-6, -3, 0, 3, 6, 9, 12, 15, 30]
 
 NTYPES = [
-    'ESC-50-MASTER',
+    'ESC-50-master',
     'wham_noise',
     'FSD50K',
     'musan',
@@ -187,6 +187,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
             # add noise to sig
             rir = None
             reverbing = False
+
             if self.reverb_lst:
                 rd_reverb = np.random.uniform(0,1)
                 if rd_reverb < self.reverb_prob:
@@ -226,6 +227,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
             spec_s, _, feat_s, pspec_s    = self.feat_inst.block_proc(audio_s)
             if DEBUG:
                 if reverbing:
+
                     print('has reverb')
                 sd.play(
                     audio_sn,
@@ -300,7 +302,7 @@ def main(args):
     sets_categories = ['train', 'test']
 
     if REVERB:
-        tmp = add_noise.get_noise_files_new("rirs_noises/RIRS_NOISES/simulated_rirs")
+        tmp = add_noise.get_noise_files_new("RIRS_NOISES/simulated_rirs")
         random.shuffle(tmp)
         start = int(len(tmp) / 5)
         lst_reverb = {}
@@ -322,7 +324,7 @@ def main(args):
                     for name in lst_ns:
                         name = re.sub(r'\\', '/', name)
                         file.write(f'{name}\n')
-        elif ntype in {'FSD50K','ESC-50-MASTER'}:
+        elif ntype in {'FSD50K','ESC-50-master'}:
             with open(f'wavs/noise/{ntype}/non_speech.csv', 'r') as file: # pylint: disable=unspecified-encoding
                 lines = file.readlines()
             random.shuffle(lines)
@@ -397,6 +399,7 @@ def main(args):
         with open(target_files[train_set], 'r') as file: # pylint: disable=unspecified-encoding
             filepaths = file.readlines()
             random.shuffle(filepaths)
+
             if datasize_noise != -1:
                 if train_set=='train':
                     filepaths = filepaths[:datasize_noise]
@@ -430,6 +433,7 @@ def main(args):
 
             noise_files = { 'train' : lines_tr,
                             'test'  : lines_te}
+
             processes = [
                 FeatMultiProcsClass(
                         i, f"Thread-{i}",

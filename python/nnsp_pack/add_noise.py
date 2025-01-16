@@ -70,6 +70,7 @@ def add_noise(data, noise, snr_db, stime, etime,
 
 def get_noise_files_new(path_noise_folder):
     """Fetch all of noise files"""
+
     lst = []
     for root, _, files in os.walk(f'wavs/noise/{path_noise_folder}'):
         for file in files:

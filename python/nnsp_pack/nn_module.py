@@ -5,7 +5,10 @@ import re
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers
+from .minRNN import minGRU
+from .unet import unet
 from . import post_aware_quant
+from .statsClass import statsClass
 
 class NeuralNetClass(tf.keras.Model):
     """
@@ -21,7 +24,7 @@ class NeuralNetClass(tf.keras.Model):
                  dropRates              = [0] * 10,
                  dropRates_recurrent    = [0] * 10,
                  dim_target = 7,
-                 scalar_output = 1.0):
+                 scalar_output = 1):
 
         super(NeuralNetClass, self).__init__()
         self.kernel_size = kernel_size
@@ -43,14 +46,14 @@ class NeuralNetClass(tf.keras.Model):
                             'bias'  : 16 }
         self.nfracs = { 'kernel': [None] * self.num_layers,
                         'bias'  : [None] * self.num_layers }
-        self.h_states = [None] * len(self.layer_types)
-        self.c_states = [None] * len(self.layer_types)
-        self.scalar_output = scalar_output
 
         for i in range(self.num_layers):
             self.nfracs['kernel'][i] =  tf.Variable(12, dtype = tf.float32, trainable = False)
             self.nfracs['bias'][i] =  tf.Variable(12, dtype = tf.float32, trainable = False)
-        for i, neuron in enumerate(neurons[1:]):
+
+        for i in range(len(neurons)-1):
+            neuron = neurons[i+1]
+
             layer_type = layer_types[i]
             kernel_initializer = self.weight_initializer(
                                         neurons[i],
@@ -99,24 +102,25 @@ class NeuralNetClass(tf.keras.Model):
                         activation='tanh',
                         recurrent_activation='sigmoid',
                         unroll=False)
-
+            elif layer_type == 'minGRU':
+                layer = minGRU(
+                        neuron)
+            elif layer_type == 'unet':
+                layer= unet(batch_size=batchsize)
+            else:
                 drop_rate = 0 # already dropout in the lstm layer
             self.nn_layers[i] = layer
             noise_shape=(None,1, None)
             self.dropout_layers[i] = layers.Dropout(drop_rate, noise_shape = noise_shape)
-        self.stats = {'acc_loss'        : tf.Variable(0, trainable = False, dtype = tf.float64),
-                      'acc_steps'       : tf.Variable(0, trainable = False, dtype = tf.float64),
-                      'acc_matchCount'  : tf.Variable(0, trainable = False, dtype = tf.float64)
-                      }
 
-        self.confusion_mat = tf.zeros((dim_target , dim_target), dtype=tf.float64)
 
+        self.stats_inst = statsClass(self.dim_trgt)
         self.weight_change = [
             tf.Variable(0, dtype = tf.float32, trainable = False)
                 for i in range(20)]
 
         # run this to initialize the weight tables
-        self.build_nn()
+        self.build_nn(batch_size=batchsize)
 
     def call(
         self,
@@ -129,49 +133,106 @@ class NeuralNetClass(tf.keras.Model):
         """Calling function"""
         self.bitwidths['kernel'] = 8
         self.bitwidths['bias'] = 16
-        (h_states, c_states) = states
 
         # add the last dim to include channel (batches, timesteps, dim_feat, numCh = 1)
         out = self.input_layer(data_in)
-        for i, layer in enumerate(self.nn_layers):
+
+        states_out=[]
+        for i, subnet in enumerate(self.nn_layers):
+            state = states[i]
             drop_layer = self.dropout_layers[i]
             out = drop_layer(out, training = training)
+
             if self.layer_types[i] == 'conv1d':
                 out = tf.expand_dims(out,3)
-                out = layer(out, training = training) # (batches, timesteps, 1, neurons[1])
+                out = subnet(out, training = training) # (batches, timesteps, 1, neurons[1])
                 out = out[:, :, 0, :]
+                states_out += [None]
             elif self.layer_types[i] == 'conv2d':
                 out = tf.expand_dims(out,3)
-                out = layer(out, training = training) # (batches, timesteps, dim_feat, num_filters)
+                out = subnet(out, training = training) # (batches, timesteps, dim_feat, num_filters)
                 shape = out.shape
                 out = tf.reshape(out, [shape[0], shape[1],-1])
+                states_out += [None]
             elif self.layer_types[i] == 'lstm':
-                out, h_state, c_state = layer(
+                h_state, c_state = state
+                out, h_state, c_state = subnet(
                                 out,
-                                initial_state = (h_states[i], c_states[i]),
+                                initial_state = (h_state, c_state),
                                 training = training)
+                states_out += [(h_state, c_state)]
 
-                self.h_states[i] = h_state
-                self.c_states[i] = c_state
+            elif self.layer_types[i] == 'minGRU':
+                out = subnet(out, return_states=False)
+                states_out += [None]
+            elif self.layer_types[i] == 'unet':
+                out = tf.expand_dims(out,-1)
+                out, states_unet = subnet(out, state, training=training)
+                out = out[:,:,:,0]
+                states_out += [states_unet]
             else:
-                out = layer(out, training=training)
-        states = (self.h_states, self.c_states)
-        out *= mask
-        out *= self.scalar_output
-        self.update_limited_quantizated(quantized)
-        return out, states
+                out = subnet(out, training=training)
+                states_out += [None]
 
-    def build_nn(self, quantized=False):
+        out *= mask
+        self.update_limited_quantizated(quantized)
+
+        return out, states_out
+
+    def build_nn(self, quantized=False, batch_size=32):
         """
         Build your nn. This will provide the physical weight table.
         """
-        states = lstm_states(self, batchsize = 1, zero_state = False)
-        inputs = tf.constant(np.random.randn(1,1, self.neurons[0]), dtype = tf.float32)
+        timesteps=500
+        states = self.make_states(batchsize = batch_size, zero_state = False)
+
+        inputs = tf.constant(
+            np.random.randn(batch_size,timesteps, self.neurons[0]), dtype = tf.float32)
         batch_size, _, dim_feat = inputs.shape
         zero_pad = tf.zeros((batch_size, self.kernel_size -1, dim_feat), dtype = tf.float32)
         inputs_pad = tf.concat([zero_pad, inputs], 1)
         masks = 1
-        self.call(inputs_pad, masks, states, quantized=quantized)
+        self.call(
+            inputs_pad,
+            masks,
+            states,
+            quantized=quantized)
+
+    def make_states(
+            self,
+            batchsize,
+            zero_state = False):
+        """
+        Initalize lstm states
+        """
+        neurons = self.neurons
+        layer_types = self.layer_types
+        states = []
+
+        for i, neurons_io in enumerate(zip(neurons[:-1], neurons[1:])):  
+            neurons_in, neurons_out = neurons_io
+            if layer_types[i] == 'lstm':
+                h_states = tf.Variable(
+                            tf.random.truncated_normal(
+                                [batchsize, neurons_out],
+                                stddev=1/np.sqrt(neurons_in)),
+                            dtype = tf.float32,
+                            trainable = False)
+                # h_states.assign( tf.minimum(tf.maximum(h_states, -1.0), 1.0-2**-15) )
+                c_states = tf.Variable(
+                            tf.random.truncated_normal([batchsize, neurons_out]),
+                            dtype = tf.float32,
+                            trainable = False)
+                if zero_state:
+                    h_states.assign(h_states * 0)
+                    c_states.assign(c_states * 0)
+                states += [(h_states, c_states)]
+            elif layer_types[i] == 'unet':
+                state = self.nn_layers[i].encoder.make_states()
+                states += [state]
+            else:
+                states += [None]
+        return states
 
     def quantized_weight(self):
         """
@@ -291,110 +352,3 @@ class NeuralNetClass(tf.keras.Model):
 
                     qbits_b = post_aware_quant.get_frac_bit(bias, bitwidth_bias, qbits_b)
                     post_aware_quant.fake_quantization(bias, bitwidth_bias, qbits_b)
-
-    def update_cost_steps(self, ave_loss, steps):
-        """
-        update total cost and total steps
-        """
-        stats = self.stats
-        ave_loss = tf.cast(ave_loss, tf.float64)
-        steps = tf.cast(steps, tf.float64)
-        stats['acc_loss'].assign(stats['acc_loss'] + ave_loss * steps)
-        stats['acc_steps'].assign(stats['acc_steps'] + steps)
-
-    def update_accuracy(self, trgt0, est0, mask, dim):
-        """
-        Update total correct number of estimation
-        """
-        tmp = tf.reduce_sum(
-                tf.cast(tf.math.equal(est0, trgt0), tf.float64)
-                 * tf.cast(mask[:,:,0], tf.float64))
-        self.stats['acc_matchCount'].assign_add(tf.cast(tmp, tf.float64))
-
-        mat = [None] * dim * dim
-        mask = tf.cast(mask, tf.int64)[:,:,0]
-        for i in range(dim):
-            est1 = est0 * mask
-            trgt1 = trgt0 * mask
-            mask_i = tf.cast(tf.math.equal(trgt1, i), dtype = tf.int64) * mask
-            for j in range(dim):
-                tmp = tf.cast(tf.math.equal(est1, j), dtype = tf.int64) * mask_i
-                mat[i * dim + j] = tf.reduce_sum(tmp)
-        mat = tf.convert_to_tensor(mat)
-        mat = tf.reshape(mat, (dim, dim))
-
-        self.confusion_mat = self.confusion_mat + tf.cast(mat, tf.float64)
-
-    def show_loss(self, loss, total_accuracy, steps, show_step=True):
-        """
-        Print the loss function
-        """
-        loss  = tf.cast(loss,  tf.float64)
-        steps = tf.cast(steps, tf.float64)
-        loss0 = tf_round( loss / steps / self.neurons[-1] )
-        accuracy0 = tf_round( total_accuracy / steps )
-
-        tf.print('loss: ', loss0, end = '')
-        tf.print(', accuracy: ', accuracy0, end = '')
-
-        if show_step:
-            tf.print( ' (', steps, ')', end = '')
-
-    def show_confusion_matrix(self, dim_intent, logger):
-        """
-        Print the confusion matrix
-        """
-        mat = self.confusion_mat
-        string = ''
-        string += 'confused Matrix \n'
-        for i in range(dim_intent):
-            tmp = 0
-            # tf.print('\tclass %d: ' % i, end = '')
-            for j in range(dim_intent):
-                tmp = tmp + mat[i][j]
-            for j in range(dim_intent):
-                mat_ij = tf_round(mat[i][j] / tmp)
-                string += f'{mat_ij:2.2f} '
-            string+='\n'
-        logger.info(string)
-
-    def reset_stats(self):
-        """
-        Reset the internal states of the neural net
-        """
-        for _, value in self.stats.items():
-            value.assign(0)
-
-        self.confusion_mat = self.confusion_mat * 0
-
-def tf_round(data_in, prec = 10):
-    """
-    Round the tensor
-    """
-    base = tf.pow(tf.constant(10.0, dtype = data_in.dtype), prec)
-    return tf.round(data_in * base) / base
-
-def lstm_states(net, batchsize, zero_state = False):
-    """
-    Initalize lstm states
-    """
-    h_states = [None] * len(net.layer_types)
-    c_states = [None] * len(net.layer_types)
-    for i, nn_t in enumerate(net.layer_types):
-        if nn_t == 'lstm':
-            h_states[i] = tf.Variable(
-                        tf.random.truncated_normal(
-                            [batchsize, net.neurons[i+1]],
-                            stddev=1/np.sqrt(net.neurons[i])),
-                        dtype = tf.float32,
-                        trainable = False)
-            h_states[i].assign( tf.minimum(tf.maximum(h_states[i], -1.0), 1.0-2**-15) )
-            c_states[i] = tf.Variable(
-                        tf.random.truncated_normal([batchsize, net.neurons[i+1]]),
-                        dtype = tf.float32,
-                        trainable = False)
-            if zero_state:
-                h_states[i].assign(h_states[i] * 0)
-                c_states[i].assign(c_states[i] * 0)
-
-    return (h_states, c_states)
