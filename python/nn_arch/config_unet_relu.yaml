@@ -1,0 +1,20 @@
+nn_arch:
+  - layer_neurons: 257 # input neurons
+    dropout: 0.1
+
+  - layer_type: unet
+    dropout: 0.25
+    activation: relu
+    is_causal: True
+    separable: False
+    layer_neurons: 257
+    kernel_size_time: 3
+    num_chs: [1, 2, 4, 8, 16]
+
+  - layer_type: fc
+    layer_neurons: 257
+    dropout: None
+    activation: sigmoid
+feat:
+  type: 'pspec'
+  num_context: 1

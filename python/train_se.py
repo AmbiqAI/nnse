@@ -9,8 +9,9 @@ import argparse
 import pickle
 import tensorflow as tf
 import numpy as np
+import yaml
 import matplotlib.pyplot as plt
-from nnsp_pack.nn_module import NeuralNetClass
+from nnsp_pack.nn_module_new import NeuralNetClass
 from nnsp_pack.statsClass import tf_round
 from nnsp_pack.tfrecord_converter_se_split import tfrecords_pipeline
 from nnsp_pack.loss_functions import loss_mse
@@ -49,8 +50,7 @@ def train_kernel(
         optimizer,
         training    = True,
         quantized   = False,
-        len_filter = 1,
-        len_lookahead=0):
+    ):
     """
     Training kernel
     """
@@ -97,8 +97,6 @@ def epoch_proc(
         num_context     = 6,
         quantized       = False,
         feat_type       = 'mel',
-        len_filter      = 1,
-        len_lookahead = 0,
         train_summary_writer=None,):
     """
     Training for one epoch
@@ -148,8 +146,7 @@ def epoch_proc(
                     optimizer,
                     training    = training,
                     quantized   = quantized,
-                    len_filter  = len_filter,
-                    len_lookahead = len_lookahead)
+                 )
 
             _, states, ave_loss, steps = tmp
 
@@ -158,11 +155,9 @@ def epoch_proc(
         if batch % BLOCKS_PER_AUDIO == (BLOCKS_PER_AUDIO-1):
             tf.print(f"\r {int(batch / 5)}/{total_batches}: ",
                         end = '')
+
             net.stats_inst.show_loss(
-                # net.stats['acc_loss'],
-                # net.stats['acc_matchCount'],
-                # net.stats['acc_steps'],
-                net.neurons[-1],
+                net.config[-1]['layer_neurons'],
                 SHOW_STEPS,
                 lr=optimizer.learning_rate)
 
@@ -214,8 +209,7 @@ def epoch_proc(
 def test(
         args,
         nn_train,
-        num_context,
-        dim_feat,
+        config,
         stats,
         quantized):
     """ test function"""
@@ -223,6 +217,10 @@ def test(
     from nnsp_pack.basic_dsp import dc_remove
     import soundfile as sf
     import librosa
+
+    num_context = config['feat']['num_context']
+    dim_feat = config['nn_arch'][0]['layer_neurons']
+    feat_type = config['feat']['type']
     wavfile = args.test_wavefile
     # wavfile = 'test_wavs/steak_hairdryer.wav'
 
@@ -254,9 +252,9 @@ def test(
     
     pspec_sn_tmp = tf.constant(pspec_sn, dtype=tf.float32)
     pspec_sn_tmp = tf.expand_dims(pspec_sn_tmp, 0)
-    if args.feat_type == 'mel':
+    if feat_type == 'mel':
             feats = tf.matmul(pspec_sn_tmp, MEL_FBANKS)
-    elif args.feat_type == 'pspec':
+    elif feat_type == 'pspec':
         feats = tf.identity(pspec_sn_tmp)
     feats = tf_log10_eps(feats)
     feats = fakefix_tf(feats, 32, 15)
@@ -269,8 +267,8 @@ def test(
         feats = tf.concat([padddings_tsteps, feats], 1)
     nfeats = (feats - stats['nMean_feat']) * stats['nInvStd']
     nfeats = fakefix_tf(nfeats, 16, 8)
-    states = make_states(nn_train, 1, zero_state=True)
- 
+    states = nn_train.make_states(1, zero_state=True)
+
     est, states= nn_train(
         nfeats,mask=1.0,
         states=states,
@@ -285,7 +283,7 @@ def test(
         spec_sn,
         tfmask
     )
-    name_model = re.sub(r'\.txt', '', os.path.basename(args.nn_arch))
+    name_model = re.sub(r'\.yaml', '', os.path.basename(args.config_file))
     name= re.sub(r'\.wav', '', f'{os.path.basename(wavfile)}')
 
     folder=f'test_results/{name_model}/{name}'
@@ -295,7 +293,7 @@ def test(
 
     print(f'Check your noisy speech in test_results/{name}/noisy.wav')
     print(f'Check your enhanced speeech in test_results/{name}/enhance.wav')
-    
+
     plt.figure(1)
     plt.clf()
 
@@ -319,6 +317,15 @@ def test(
         aspect      = 'auto')
     plt.savefig(f'{folder}/feat_mask.pdf')
 
+def make_folder(config_file):
+    """ make folder"""
+    name_model = re.sub(r'\.yaml', '', os.path.basename(config_file))
+    name_model = re.sub(r'config_', '', name_model)
+    os.makedirs(f'models_trained', exist_ok=True)
+    os.makedirs(f'models_trained/{name_model}', exist_ok=True)
+    folder_nn = f'models_trained/{name_model}'
+    return folder_nn
+
 def main(args):
     """
     main function to train neural network training
@@ -332,28 +339,22 @@ def main(args):
         batchsize = 1
     tfrecord_list = {   'train' : args.train_list,
                         'test'  : args.test_list}
+    with open(args.config_file) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+        config_nn = config['nn_arch']
+        config_feat = config['feat']
 
-    arch = load_nn_arch(args.nn_arch)
-    neurons, drop_rates, layer_types, activations, num_context, num_dnsampl, scalar_output, len_filter, len_lookahead = arch # pylint: disable=line-too-long
-
-    folder_nn = setup_nn_folder(args.nn_arch)
+    folder_nn = make_folder(args.config_file)
 
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     train_log_dir = f'tensorboard/{folder_nn}/logs/{current_time}'
     train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
-    dim_feat = neurons[0]
+    dim_feat = config_nn[0]['layer_neurons']
 
     nn_train = NeuralNetClass(
-        neurons     = neurons,
-        layer_types = layer_types,
-        dropRates   = drop_rates,
-        activations = activations,
-        batchsize   = batchsize,
-        nDownSample = num_dnsampl,
-        kernel_size = num_context,
-        dim_target  = DIM_TARGET,
-        scalar_output = scalar_output)
+        config=config_nn,
+        batchsize   = batchsize)
 
     if epoch_loaded == 'random':
         epoch_loaded = -1
@@ -387,7 +388,7 @@ def main(args):
 
         print(f"(train) best epoch picked by loss = {np.argmin(loss['train'][0: epoch_loaded+1])}")
         print(f"(test)  best epoch picked by loss = {np.argmin(loss['test'][0: epoch_loaded+1])}")
-    
+
     fnames = {}
     for tr_set in ['train', 'test']:
         with open(tfrecord_list[tr_set], 'r') as file: # pylint: disable=unspecified-encoding
@@ -398,7 +399,7 @@ def main(args):
             else:
                 len0 = int(len(lines) / batchsize) * batchsize
                 fnames[tr_set] = [line.strip() for line in lines[:len0]]
-                
+
                 fnames[tr_set] = filter_in_data(fnames[tr_set])
                 # fnames[tr_set] = fnames[tr_set][1:100] 
     shift_step = int(np.ceil(len(fnames['train']) / batchsize))
@@ -436,7 +437,7 @@ def main(args):
         stats = feat_stats_estimator(
                 dataset_tr, fnames['train'],
                 batchsize, dim_feat, folder_nn,
-                feat_type=args.feat_type)
+                feat_type=config['feat']['type'])
 
     # nn_np = c_code_table_converter.tf2np(nn_train, quantized=quantized)
     # if DISPLAY_HISTOGRAM:
@@ -452,7 +453,7 @@ def main(args):
     print(f"Total number of parameters: {tot}")
 
     if args.mode == 'test':
-        test(args, nn_train, num_context, dim_feat,  stats, quantized)
+        test(args, nn_train, config,  stats, quantized)
         return
 
     for epoch in range(epoch1_loaded, num_epoch):
@@ -472,12 +473,11 @@ def main(args):
                 zero_state      = False,
                 norm_mean       = stats['nMean_feat'],
                 norm_inv_std    = stats['nInvStd'],
-                num_dnsampl     = num_dnsampl,
-                num_context     = num_context,
+                num_dnsampl     = 1,
+                num_context     = config_feat['num_context'],
                 quantized       = quantized,
-                feat_type       = args.feat_type,
-                len_filter      = len_filter,
-                len_lookahead   = len_lookahead)
+                feat_type       = config_feat['type'],
+                )
 
         # Computing Training loss
         epoch_proc(
@@ -491,15 +491,13 @@ def main(args):
             zero_state      = True,
             norm_mean       = stats['nMean_feat'],
             norm_inv_std    = stats['nInvStd'],
-            num_dnsampl     = num_dnsampl,
-            num_context     = num_context,
+            num_dnsampl     = 1,
+            num_context     = config_feat['num_context'],
             quantized       = quantized,
-            feat_type       = args.feat_type,
-            len_filter      = len_filter,
-            len_lookahead   = len_lookahead)
+            feat_type       = config_feat['type'],)
 
         loss['train'][epoch] = nn_train.stats_inst.stats['acc_loss'] / nn_train.stats_inst.stats['acc_steps']
-        loss['train'][epoch] /= nn_train.neurons[-1]
+        loss['train'][epoch] /= config_nn[-1]['layer_neurons']
 
         acc['train'][epoch] = nn_train.stats_inst.stats['acc_matchCount'] / nn_train.stats_inst.stats['acc_steps']
 
@@ -515,18 +513,15 @@ def main(args):
             zero_state          = True,
             norm_mean           = stats['nMean_feat'],
             norm_inv_std        = stats['nInvStd'],
-            num_dnsampl         = num_dnsampl,
-            num_context         = num_context,
+            num_dnsampl         = 1,
+            num_context         = config_feat['num_context'],
             quantized           = quantized,
-            feat_type           = args.feat_type,
-            len_filter          = len_filter,
-            len_lookahead       = len_lookahead)
+            feat_type           = config_feat['type'],)
 
         loss['test'][epoch] = nn_train.stats_inst.stats['acc_loss'] / nn_train.stats_inst.stats['acc_steps']
-        loss['test'][epoch] /= nn_train.neurons[-1]
+        loss['test'][epoch] /= config_nn[-1]['layer_neurons']
 
         acc['test'][epoch] = nn_train.stats_inst.stats['acc_matchCount'] / nn_train.stats_inst.stats['acc_steps']
-        
         nn_train.save_weights(f'{folder_nn}/checkpoints/model_checkpoint_ep{epoch}')
 
         fr = f'{folder_nn}/loss_acc.png'
@@ -586,20 +581,14 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-tw',
         '--test_wavefile',
-        default='test_wavs/keyboard_steak.wav',
+        default='test_wavs/steak_hairdryer.wav',
         help='test_wavs')
 
     argparser.add_argument(
         '-a',
-        '--nn_arch',
-        default='nn_arch/def_se_nn_arch72_pspec_unet1.txt',
+        '--config_file',
+        default='nn_arch/config_unet_relu.yaml',
         help='nn architecture')
-
-    argparser.add_argument(
-        '-ft',
-        '--feat_type',
-        default='pspec',
-        help='feature type: \'mel\'or \'pspec\'')
 
     argparser.add_argument(
         '-tr',
@@ -651,7 +640,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default=132,
+        default="random",
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \

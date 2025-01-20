@@ -14,85 +14,79 @@ class NeuralNetClass(tf.keras.Model):
     """
     NeuralNetClass: a sequential model suppors only fc, lstm, 1D-conv layers
     """
-    def __init__(self,
-                 batchsize              = 300,
-                 layer_types            = ['fc'] * 10,
-                 activations            = ['tanh'] * 10,
-                 nDownSample            = 2,
-                 kernel_size            = 6,
-                 neurons                = [10] * 10,
-                 dropRates              = [0] * 10,
-                 dropRates_recurrent    = [0] * 10,
-                 dim_target = 7,
-                 scalar_output = 1):
+    def __init__(
+            self,
+            config                 = None,
+            batchsize              = 300):
 
         super(NeuralNetClass, self).__init__()
-        self.kernel_size = kernel_size
-        self.dim_trgt = neurons[-1]
-        self.dim_feat = neurons[0]
+        self.config = config
+        self.dim_trgt = config[-1]['layer_neurons']
+        self.dim_feat = config[0]['layer_neurons']
 
-        self.num_layers = len(layer_types)
-        self.nDownSample = nDownSample
-        self.neurons = neurons.copy()
-        self.layer_types = layer_types.copy()
-        self.activaitons = activations.copy()
+        self.num_layers = len(config)-1
         self.input_layer = tf.keras.layers.InputLayer(
-                input_shape   = ((None, neurons[0])),
+                input_shape   = ((None, self.dim_feat)),
                 batch_size    = batchsize)
 
-        self.nn_layers = [None] * self.num_layers
-        self.dropout_layers = [None] * self.num_layers
         self.bitwidths = {  'kernel': 16,
                             'bias'  : 16 }
         self.nfracs = { 'kernel': [None] * self.num_layers,
                         'bias'  : [None] * self.num_layers }
-
+        self.num_context = 1
         for i in range(self.num_layers):
             self.nfracs['kernel'][i] =  tf.Variable(12, dtype = tf.float32, trainable = False)
             self.nfracs['bias'][i] =  tf.Variable(12, dtype = tf.float32, trainable = False)
 
-        for i in range(len(neurons)-1):
-            neuron = neurons[i+1]
+        self.nn_layers =[]
+        self.dropout_layers = []
 
-            layer_type = layer_types[i]
+        for da_former, da in zip(config[:-1], config[1:]):
+            neuron_i = da_former['layer_neurons']
+            neuron_o = da['layer_neurons']
+            activation = da['activation']
+            layer_type = da['layer_type']
             kernel_initializer = self.weight_initializer(
-                                        neurons[i],
-                                        neuron,
+                                        neuron_i,
+                                        neuron_o,
                                         layer_type,
-                                        activations[i])
-            drop_rate = dropRates[i]
-            droprate_recurrent_layer = dropRates_recurrent[i]
+                                        activation)
+            drop_rate = da_former['dropout']
+            droprate_recurrent_layer = 0
 
             if layer_type == 'conv1d':
+                kernel_size = da['kernel_size']
+                self.num_context = kernel_size[0]
                 layer = layers.Conv2D(
-                        neuron,
-                        (kernel_size, neurons[i]),
+                        neuron_o,
+                        kernel_size,
                         padding     = 'valid',
-                        strides     = (self.nDownSample, 1), # downsampling 2 in timesteps dim
-                        activation  = activations[i],
+                        strides     = (1, 1), # downsampling 2 in timesteps dim
+                        activation  = activation,
                         kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer),
-                        input_shape = (None, neurons[i], 1)) # (time, dim_feat, ch)
+                        input_shape = (None, neuron_i, 1)) # (time, dim_feat, ch)
 
             elif layer_type == 'conv2d':
+                kernel_size = da['kernel_size']
                 layer = layers.Conv2D(
-                        neuron,
-                        (kernel_size, kernel_size),
+                        neuron_o,
+                        kernel_size=kernel_size,
                         padding     = 'valid',
-                        strides     = (self.nDownSample, 1), # downsampling 2 in timesteps dim
-                        activation  = activations[i],
+                        strides     = (1, 1), # downsampling 2 in timesteps dim
+                        activation  = activation,
                         kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer),
-                        input_shape = (None, neurons[i], 1)) # (time, dim_feat, ch)
+                        input_shape = (None, neuron_i, 1)) # (time, dim_feat, ch)
 
             elif layer_type == 'fc':
                 layer = layers.Dense(
-                        neuron,
-                        activation = activations[i],
+                        neuron_o,
+                        activation = activation,
                         # kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer)
                         )
 
             elif layer_type == 'lstm':
                 layer = layers.LSTM(
-                        neuron,
+                        neuron_o,
                         dropout = drop_rate,
                         recurrent_dropout = droprate_recurrent_layer,
                         return_sequences = True,
@@ -104,17 +98,20 @@ class NeuralNetClass(tf.keras.Model):
                         unroll=False)
             elif layer_type == 'minGRU':
                 layer = minGRU(
-                        neuron)
+                        neuron_o)
             elif layer_type == 'unet':
                 layer= unet(
                     batch_size=batchsize,
-                    separable=True,
-                    activation=activations[i])
+                    separable=da['separable'],
+                    is_causal=da['is_causal'],
+                    num_chs = da['num_chs'],
+                    kernel_size_time = da['kernel_size_time'],
+                    activation=activation)
             else:
                 drop_rate = 0 # already dropout in the lstm layer
-            self.nn_layers[i] = layer
+            self.nn_layers += [layer]
             noise_shape=(None,1, None)
-            self.dropout_layers[i] = layers.Dropout(drop_rate, noise_shape = noise_shape)
+            self.dropout_layers+= [layers.Dropout(drop_rate, noise_shape = noise_shape)]
 
 
         self.stats_inst = statsClass(self.dim_trgt)
@@ -141,23 +138,25 @@ class NeuralNetClass(tf.keras.Model):
         out = self.input_layer(data_in)
 
         states_out=[]
-        for i, subnet in enumerate(self.nn_layers):
+        for i, layer_info in enumerate(zip(self.nn_layers, self.config[1:])):
+            subnet, config = layer_info
+            layer_type=config['layer_type']
             state = states[i]
             drop_layer = self.dropout_layers[i]
             out = drop_layer(out, training = training)
 
-            if self.layer_types[i] == 'conv1d':
+            if layer_type == 'conv1d':
                 out = tf.expand_dims(out,3)
                 out = subnet(out, training = training) # (batches, timesteps, 1, neurons[1])
                 out = out[:, :, 0, :]
                 states_out += [None]
-            elif self.layer_types[i] == 'conv2d':
+            elif layer_type == 'conv2d':
                 out = tf.expand_dims(out,3)
                 out = subnet(out, training = training) # (batches, timesteps, dim_feat, num_filters)
-                shape = out.shape
+                shape = tf.shape(out)
                 out = tf.reshape(out, [shape[0], shape[1],-1])
                 states_out += [None]
-            elif self.layer_types[i] == 'lstm':
+            elif layer_type == 'lstm':
                 h_state, c_state = state
                 out, h_state, c_state = subnet(
                                 out,
@@ -165,10 +164,10 @@ class NeuralNetClass(tf.keras.Model):
                                 training = training)
                 states_out += [(h_state, c_state)]
 
-            elif self.layer_types[i] == 'minGRU':
+            elif layer_type == 'minGRU':
                 out = subnet(out, return_states=False)
                 states_out += [None]
-            elif self.layer_types[i] == 'unet':
+            elif layer_type == 'unet':
                 out = tf.expand_dims(out,-1)
                 out, states_unet = subnet(out, state, training=training)
                 out = out[:,:,:,0]
@@ -190,10 +189,17 @@ class NeuralNetClass(tf.keras.Model):
         states = self.make_states(batchsize = batch_size, zero_state = False)
 
         inputs = tf.constant(
-            np.random.randn(batch_size,timesteps, self.neurons[0]), dtype = tf.float32)
+            np.random.randn(
+                batch_size,timesteps, self.config[0]['layer_neurons']),
+                dtype = tf.float32)
         batch_size, _, dim_feat = inputs.shape
-        zero_pad = tf.zeros((batch_size, self.kernel_size -1, dim_feat), dtype = tf.float32)
-        inputs_pad = tf.concat([zero_pad, inputs], 1)
+        if self.num_context -1 > 0:
+            zero_pad = tf.zeros(
+                (batch_size, self.num_context-1, dim_feat),
+                dtype = tf.float32)
+            inputs_pad = tf.concat([zero_pad, inputs], 1)
+        else:
+            inputs_pad = inputs
         masks = 1
         self.call(
             inputs_pad,
@@ -208,29 +214,30 @@ class NeuralNetClass(tf.keras.Model):
         """
         Initalize lstm states
         """
-        neurons = self.neurons
-        layer_types = self.layer_types
+        config=self.config
         states = []
-
-        for i, neurons_io in enumerate(zip(neurons[:-1], neurons[1:])):  
-            neurons_in, neurons_out = neurons_io
-            if layer_types[i] == 'lstm':
+        for i, data in enumerate(zip(config[:-1], config[1:])):
+            config_i, config_o = data
+            neuron_in = config_i['layer_neurons']
+            neuron_out = config_o['layer_neurons']
+            layer_type = config_o['layer_type']
+            if layer_type == 'lstm':
                 h_states = tf.Variable(
                             tf.random.truncated_normal(
-                                [batchsize, neurons_out],
-                                stddev=1/np.sqrt(neurons_in)),
+                                [batchsize, neuron_out],
+                                stddev=1/np.sqrt(neuron_in)),
                             dtype = tf.float32,
                             trainable = False)
                 # h_states.assign( tf.minimum(tf.maximum(h_states, -1.0), 1.0-2**-15) )
                 c_states = tf.Variable(
-                            tf.random.truncated_normal([batchsize, neurons_out]),
+                            tf.random.truncated_normal([batchsize, neuron_out]),
                             dtype = tf.float32,
                             trainable = False)
                 if zero_state:
                     h_states.assign(h_states * 0)
                     c_states.assign(c_states * 0)
                 states += [(h_states, c_states)]
-            elif layer_types[i] == 'unet':
+            elif layer_type == 'unet':
                 state = self.nn_layers[i].encoder.make_states()
                 states += [state]
             else:
@@ -307,11 +314,12 @@ class NeuralNetClass(tf.keras.Model):
         """
         Limiter and quantization of weight tables
         """
-        for i, layer in enumerate(self.nn_layers):
+        for i, layer_info in enumerate(zip(self.nn_layers, self.config[1:])):
+            layer, config = layer_info
             qbits_w = self.nfracs['kernel'][i]
             qbits_b = self.nfracs['bias'][i]
-
-            if self.layer_types[i] == 'conv1d' or self.layer_types[i] == 'fc':
+            layer_type = config['layer_type']
+            if layer_type == 'conv1d' or layer_type == 'fc':
                 for val in layer.trainable_variables:
                     if re.search(r'bias', val.name):
                         bias = val
@@ -326,7 +334,7 @@ class NeuralNetClass(tf.keras.Model):
                     post_aware_quant.get_frac_bit(bias, bitwidth_bias, qbits_b)
                     post_aware_quant.fake_quantization(bias, bitwidth_bias, qbits_b)
 
-            elif self.layer_types[i] == 'lstm':
+            elif layer_type == 'lstm':
                 for val in layer.trainable_variables:
                     if re.search(r'bias', val.name):
                         bias = val

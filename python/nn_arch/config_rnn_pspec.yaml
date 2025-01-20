@@ -1,0 +1,33 @@
+nn_arch:
+  - layer_neurons: 257 # input neurons
+    dropout: 0.1
+
+  - layer_type: conv1d
+    filters: 72
+    kernel_size: !!python/tuple [6, 257]
+    dropout: 0.25
+    activation: relu
+    layer_neurons: 257
+
+  - layer_type: lstm
+    layer_neurons: 72
+    dropout: 0.25
+    activation: tanh
+
+  - layer_type: fc
+    layer_neurons: 72
+    activation: tanh
+    dropout: 0.25
+
+  - layer_type: fc
+    layer_neurons: 72
+    activation: tanh
+    dropout: 0.25
+
+  - layer_type: fc
+    layer_neurons: 72
+    activation: sigmoid
+    dropout: None
+feat:
+  type: 'pspec'
+  num_context: 6
