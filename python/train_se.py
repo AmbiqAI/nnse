@@ -587,7 +587,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--config_file',
-        default='nn_arch/config_unet_relu.yaml',
+        default='nn_arch/config_unet_relu_large.yaml',
         help='nn architecture')
 
     argparser.add_argument(
