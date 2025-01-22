@@ -51,7 +51,7 @@ class NeuralNetClass(tf.keras.Model):
                                         neuron_o,
                                         layer_type,
                                         activation)
-            drop_rate = da_former['dropout']
+            drop_rate = da['dropout']
             droprate_recurrent_layer = 0
 
             if layer_type == 'conv1d':
