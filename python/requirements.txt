@@ -11,3 +11,5 @@ pyaudio
 pyqt5
 scipy
 tqdm
+pesq
+pystoi

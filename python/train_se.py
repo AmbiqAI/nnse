@@ -108,18 +108,26 @@ def epoch_proc(
 
     total_batches = int(len(fnames) / batchsize)
 
+    # intialize the padding for the first batch
+
+    if not net.is_causal:
+        num_context = net.kernel_size_time
+        shape = (batchsize, num_context-1, net.dim_trgt)
+        head_pspec_s = tf.zeros(shape, dtype = tf.float32)
+        head_pspec_sn = tf.zeros(shape, dtype = tf.float32)
+
     for batch, data in enumerate(dataset):
-        if num_context - 1 > 0:
-            if batch % BLOCKS_PER_AUDIO == 0:
-                # states = make_lstm_states(net, batchsize, zero_state=zero_state)
+        # if num_context - 1 > 0:
+        #     if batch % BLOCKS_PER_AUDIO == 0:
+        #         # states = make_lstm_states(net, batchsize, zero_state=zero_state)
 
-                shape = (batchsize, num_context-1, dim_feat)
+        #         shape = (batchsize, num_context-1, dim_feat)
 
-                padddings_tsteps = tf.constant(
-                                np.full(shape, np.log10(2**-15)),
-                                dtype = tf.float32)
-            else:
-                padddings_tsteps = tf.identity(feats[:,-(num_context-1):,:])
+        #         padddings_tsteps = tf.constant(
+        #                         np.full(shape, np.log10(2**-15)),
+        #                         dtype = tf.float32)
+        #     else:
+        #         padddings_tsteps = tf.identity(feats[:,-(num_context-1):,:])
 
         pspec_sn, masks, pspec_s, _ = data
         if feat_type == 'mel':
@@ -128,19 +136,26 @@ def epoch_proc(
             feats = tf.identity(pspec_sn)
         feats = tf_log10_eps(feats)
         feats = fakefix_tf(feats, 32, 15)
-        if num_context - 1 > 0:
-            feats = tf.concat([padddings_tsteps, feats], 1)
+        # if num_context - 1 > 0:
+        #     feats = tf.concat([padddings_tsteps, feats], 1)
         nfeats = (feats - norm_mean) * norm_inv_std
         nfeats = fakefix_tf(nfeats, 16, 8)
+
+        if not net.is_causal:
+            head_pspec_s = tf.identity(pspec_s[:,-(num_context-1):,:])
+            head_pspec_sn = tf.identity(pspec_sn[:,-(num_context-1):,:])
+            pspec_s = tf.concat([head_pspec_s, pspec_s[:,:-(num_context-1):,:]], 1)
+            pspec_sn = tf.concat([head_pspec_sn, pspec_sn[:,:-(num_context-1):,:]], 1)
+
         _, steps, _ = pspec_sn.shape
         for k in range(steps // timesteps):
             start = k * timesteps
             end = (k+1) * timesteps
             tmp = train_kernel(
-                    tf.identity(  nfeats[:,start:end+num_context-1,:]),
-                    tf.identity(pspec_sn[:,start:end:num_dnsampl,:]),
-                    tf.identity( pspec_s[:,start:end:num_dnsampl,:]),
-                    tf.identity(   masks[:,start:end:num_dnsampl,:]),
+                    tf.identity(  nfeats[:,start:end,:]),
+                    tf.identity(pspec_sn[:,start:end,:]),
+                    tf.identity( pspec_s[:,start:end,:]),
+                    tf.identity(   masks[:,start:end,:]),
                     states,
                     net,
                     optimizer,
@@ -587,7 +602,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--config_file',
-        default='nn_arch/config_unet_relu_large.yaml',
+        default='nn_arch/config_unet_relu_large_noncausal.yaml',
         help='nn architecture')
 
     argparser.add_argument(

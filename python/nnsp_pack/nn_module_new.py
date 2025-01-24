@@ -40,7 +40,8 @@ class NeuralNetClass(tf.keras.Model):
 
         self.nn_layers =[]
         self.dropout_layers = []
-
+        self.kernel_size_time = 1
+        self.is_causal = False
         for da_former, da in zip(config[:-1], config[1:]):
             neuron_i = da_former['layer_neurons']
             neuron_o = da['layer_neurons']
@@ -107,6 +108,8 @@ class NeuralNetClass(tf.keras.Model):
                     num_chs = da['num_chs'],
                     kernel_size_time = da['kernel_size_time'],
                     activation=activation)
+                self.kernel_size_time = da['kernel_size_time']
+                self.is_causal = da['is_causal']
             else:
                 drop_rate = 0 # already dropout in the lstm layer
             self.nn_layers += [layer]
@@ -238,7 +241,7 @@ class NeuralNetClass(tf.keras.Model):
                     c_states.assign(c_states * 0)
                 states += [(h_states, c_states)]
             elif layer_type == 'unet':
-                state = self.nn_layers[i].encoder.make_states()
+                state = self.nn_layers[i].make_states()
                 states += [state]
             else:
                 states += [None]
