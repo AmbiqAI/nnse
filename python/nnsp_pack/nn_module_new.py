@@ -17,7 +17,8 @@ class NeuralNetClass(tf.keras.Model):
     def __init__(
             self,
             config                 = None,
-            batchsize              = 300):
+            batchsize              = 300,
+            unroll_rnn             = False,):
 
         super(NeuralNetClass, self).__init__()
         self.config = config
@@ -99,7 +100,7 @@ class NeuralNetClass(tf.keras.Model):
                         unit_forget_bias = True,
                         activation='tanh',
                         recurrent_activation='sigmoid',
-                        unroll=False)
+                        unroll=unroll_rnn)
                 self.kernel_size += [None]
             elif layer_type == 'minGRU':
                 layer = minGRU(
@@ -111,7 +112,8 @@ class NeuralNetClass(tf.keras.Model):
                     separable=da['separable'],
                     num_chs = da['num_chs'],
                     kernel_size_time = da['kernel_size_time'],
-                    activation=activation)
+                    activation=activation,
+                    unroll_rnn=unroll_rnn)
                 self.kernel_size_time = da['kernel_size_time']
 
             else:
@@ -251,7 +253,7 @@ class NeuralNetClass(tf.keras.Model):
                 state = tf.fill(shape, tf.math.log(2**-15) / tf.math.log(10.0))
                 if norm_mean is not None:
                     state = (state - norm_mean) * norm_inv_std
-               
+
                 states += [state]
 
             elif layer_type == 'unet':

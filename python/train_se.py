@@ -428,10 +428,14 @@ def main(args):
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
     dim_feat = config_nn[0]['layer_neurons']
-
+    if args.mode=='train':
+        unroll_rnn=False
+    else:
+        unroll_rnn=True
     nn_train = NeuralNetClass(
         config=config_nn,
-        batchsize   = batchsize)
+        batchsize   = batchsize,
+        unroll_rnn=unroll_rnn)
 
     if epoch_loaded == 'random':
         epoch_loaded = -1
@@ -717,7 +721,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default="latest",
+        default="random",
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \

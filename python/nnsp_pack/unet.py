@@ -259,6 +259,7 @@ class unet(tf.keras.layers.Layer):
             num_chs=[1, 2, 4, 8, 16],
             separable=False,
             activation='relu',
+            unroll_rnn=False,
             **kwargs):
         super(unet,self).__init__(**kwargs)
 
@@ -283,7 +284,11 @@ class unet(tf.keras.layers.Layer):
         self.batch_size=batch_size
         self.F = 15
         self.chs=self.num_chs[-1]
-        self.rnn = tf.keras.layers.LSTM(self.F * self.chs, stateful=True, return_sequences=True)
+        self.rnn = tf.keras.layers.LSTM(
+            self.F * self.chs,
+            stateful=True,
+            unroll=unroll_rnn,
+            return_sequences=True)
 
     def make_states(
             self,
