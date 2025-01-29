@@ -3,13 +3,13 @@ import torchaudio
 from torchaudio.pipelines import SQUIM_OBJECTIVE
 import torchaudio.functional as F
 
-folder = 'test_results/config_unet_tanh_noncausal/steak_hairdryer'
+# folder = 'test_results/config_unet_tanh_noncausal/steak_hairdryer'
 
-y_no, fs = torchaudio.load(f'{folder}/noisy.wav')
-y_en, fs = torchaudio.load(f'{folder}/enhance.wav')
-# fname='steak_hairdryer.wav'
-# y_no, fs = torchaudio.load(f'test_wavs/{fname}')
-# y_en, fs = torchaudio.load(f'df2/enhanced_{fname}')
+# y_no, fs = torchaudio.load(f'{folder}/noisy.wav')
+# y_en, fs = torchaudio.load(f'{folder}/enhance.wav')
+fname='keyboard_steak.wav'
+y_no, fs = torchaudio.load(f'test_wavs/{fname}')
+y_en, fs = torchaudio.load(f'df2/enhanced_{fname}')
 
 
 y = torch.concat([y_no, y_en], dim=0)

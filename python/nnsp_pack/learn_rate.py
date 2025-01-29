@@ -54,7 +54,7 @@ class CosineSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         step = tf.cast(step, tf.float32)
         step = step + self.start_step
         step_s = step - self.warmup_steps
-        lr_high = (0.5 + tf.cos( 2.0 * PI / 2.0 *step_s/(self.total_steps-self.warmup_steps)) + 0.5)/2
+        lr_high = (0.5 + tf.cos( 2.0 * PI / 2.0 *step_s /(self.total_steps-self.warmup_steps)) + 0.5)/2
 
         lr_high = lr_high * (self.base_lr - self.end_lr) + self.end_lr
         lr_low=step * (self.base_lr) / (self.warmup_steps)
@@ -64,13 +64,11 @@ class CosineSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
         return lr
 
 if __name__ == "__main__":
-    total_steps = 545 * 150
+    total_steps = 300* 5 * 150
     lr_gen = CosineSchedule(total_steps=total_steps)
     lrs = np.arange(total_steps, dtype=np.float32)
-    
+
     outs = lr_gen(lrs)
 
     plt.plot(outs)
     plt.show()
-    
-    

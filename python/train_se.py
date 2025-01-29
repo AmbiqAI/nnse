@@ -21,7 +21,7 @@ from nnsp_pack.calculate_feat_stats_se_split import feat_stats_estimator
 from nnsp_pack.load_nn_arch import load_nn_arch, setup_nn_folder
 from nnsp_pack.tf_basic_math import tf_log10_eps
 # import c_code_table_converter
-
+RESET_EVERY_AUDIO_CLIP = False
 SHOW_STEPS          = False
 DISPLAY_HISTOGRAM   = False
 BLOCKS_PER_AUDIO    = 5
@@ -58,8 +58,8 @@ def train_kernel(
 
         est, states = net(
                 nfeat,
-                mask,
                 states,
+                mask=mask,
                 training    = training,
                 quantized   = quantized)
         amp_sn = tf.math.sqrt(pspec_sn)
@@ -91,64 +91,78 @@ def epoch_proc(
         timesteps,
         training,
         zero_state,
-        norm_mean,
-        norm_inv_std,
-        num_dnsampl     = 1,
-        num_context     = 6,
+        feat_stats,
+        config_feat,
+        epoch = 0,
         quantized       = False,
-        feat_type       = 'mel',
         train_summary_writer=None,):
     """
     Training for one epoch
     """
-    dim_feat, = norm_mean.shape
-
+    norm_mean       = feat_stats['nMean_feat']
+    norm_inv_std    = feat_stats['nInvStd']
+    num_lookahead   = config_feat['num_lookahead']
+    feat_type = config_feat['type']
     net.stats_inst.reset_stats()
-    states = net.make_states(batchsize, zero_state=zero_state)
 
-    total_batches = int(len(fnames) / batchsize)
+    def reset_states():
+        """
+        Reset states
+        """
+        states = net.make_states(
+            batchsize,
+            norm_mean=norm_mean,
+            norm_inv_std = norm_inv_std,
+            zero_state=zero_state)
+        if num_lookahead > 0: # non-causal
+            shape = (batchsize, num_lookahead, net.dim_trgt)
+            head_s = tf.zeros(shape, dtype = tf.float32)
+            head_sn = tf.zeros(shape, dtype = tf.float32)
+        return states, head_s, head_sn
+
+    total_batches =  len(fnames) // batchsize
 
     # intialize the padding for the first batch
+    states, head_pspec_s, head_pspec_sn = reset_states()
 
-    if not net.is_causal:
-        num_context = net.kernel_size_time
-        shape = (batchsize, num_context-1, net.dim_trgt)
-        head_pspec_s = tf.zeros(shape, dtype = tf.float32)
-        head_pspec_sn = tf.zeros(shape, dtype = tf.float32)
-
+    total_steps=BLOCKS_PER_AUDIO * total_batches * epoch
     for batch, data in enumerate(dataset):
-        # if num_context - 1 > 0:
-        #     if batch % BLOCKS_PER_AUDIO == 0:
-        #         # states = make_lstm_states(net, batchsize, zero_state=zero_state)
-
-        #         shape = (batchsize, num_context-1, dim_feat)
-
-        #         padddings_tsteps = tf.constant(
-        #                         np.full(shape, np.log10(2**-15)),
-        #                         dtype = tf.float32)
-        #     else:
-        #         padddings_tsteps = tf.identity(feats[:,-(num_context-1):,:])
-
+        if train_summary_writer is not None:
+            with train_summary_writer.as_default():
+                tf.summary.scalar(
+                    'learning_rate',
+                    optimizer.learning_rate,
+                    step=total_steps)
+                tf.summary.scalar(
+                    'steps',
+                    total_steps,
+                    step=epoch)
+            total_steps+=1
         pspec_sn, masks, pspec_s, _ = data
+
         if feat_type == 'mel':
             feats = tf.matmul(pspec_sn, MEL_FBANKS)
         elif feat_type == 'pspec':
             feats = tf.identity(pspec_sn)
         feats = tf_log10_eps(feats)
         feats = fakefix_tf(feats, 32, 15)
-        # if num_context - 1 > 0:
-        #     feats = tf.concat([padddings_tsteps, feats], 1)
         nfeats = (feats - norm_mean) * norm_inv_std
         nfeats = fakefix_tf(nfeats, 16, 8)
 
-        if not net.is_causal:
-            head_pspec_s = tf.identity(pspec_s[:,-(num_context-1):,:])
-            head_pspec_sn = tf.identity(pspec_sn[:,-(num_context-1):,:])
-            pspec_s = tf.concat([head_pspec_s, pspec_s[:,:-(num_context-1):,:]], 1)
-            pspec_sn = tf.concat([head_pspec_sn, pspec_sn[:,:-(num_context-1):,:]], 1)
+        if RESET_EVERY_AUDIO_CLIP:
+            if batch % BLOCKS_PER_AUDIO == (BLOCKS_PER_AUDIO-1):
+                states, head_pspec_s, head_pspec_sn = reset_states()
+        if num_lookahead > 0: # non-causal
+            tmp_s = tf.concat([head_pspec_s, pspec_s], 1)
+            tmp_sn = tf.concat([head_pspec_sn, pspec_sn], 1)
+            head_pspec_s  =  tf.identity(pspec_s[:,-num_lookahead:,:])
+            head_pspec_sn = tf.identity(pspec_sn[:,-num_lookahead:,:])
+            pspec_s  =  tmp_s[:,:-num_lookahead,:]
+            pspec_sn = tmp_sn[:,:-num_lookahead,:]
 
         _, steps, _ = pspec_sn.shape
         for k in range(steps // timesteps):
+
             start = k * timesteps
             end = (k+1) * timesteps
             tmp = train_kernel(
@@ -168,7 +182,7 @@ def epoch_proc(
             net.stats_inst.update_cost_steps(ave_loss, steps)
 
         if batch % BLOCKS_PER_AUDIO == (BLOCKS_PER_AUDIO-1):
-            tf.print(f"\r {int(batch / 5)}/{total_batches}: ",
+            tf.print(f"\r {batch // BLOCKS_PER_AUDIO}/{total_batches}: ",
                         end = '')
 
             net.stats_inst.show_loss(
@@ -225,15 +239,16 @@ def test(
         args,
         nn_train,
         config,
-        stats,
+        feat_stats,
         quantized):
     """ test function"""
     from nnsp_pack.feature_module import FeatureClass, display_stft_all
     from nnsp_pack.basic_dsp import dc_remove
+    from nnsp_pack.tflite_convert import warp_tf_model, tflite_convert
     import soundfile as sf
     import librosa
 
-    num_context = config['feat']['num_context']
+    num_lookahead = config['feat']['num_lookahead']
     dim_feat = config['nn_arch'][0]['layer_neurons']
     feat_type = config['feat']['type']
     wavfile = args.test_wavefile
@@ -256,6 +271,7 @@ def test(
         'len_fft'       : 512,
         'sample_rate'   : 16000,
         'nfilters_mel'  : 72 }
+
     feat_inst      = FeatureClass(
                             win_size        = params_audio_def['win_size'],
                             hop             = params_audio_def['hop'],
@@ -264,7 +280,7 @@ def test(
                             nfilters_mel    = params_audio_def['nfilters_mel'])
 
     spec_sn, _, feat_sn, pspec_sn = feat_inst.block_proc(speech)
-    
+
     pspec_sn_tmp = tf.constant(pspec_sn, dtype=tf.float32)
     pspec_sn_tmp = tf.expand_dims(pspec_sn_tmp, 0)
     if feat_type == 'mel':
@@ -273,31 +289,63 @@ def test(
         feats = tf.identity(pspec_sn_tmp)
     feats = tf_log10_eps(feats)
     feats = fakefix_tf(feats, 32, 15)
-    if num_context - 1 > 0:
-        shape = (1, num_context-1, dim_feat)
 
-        padddings_tsteps = tf.constant(
-                        np.full(shape, np.log10(2**-15)),
-                        dtype = tf.float32)
-        feats = tf.concat([padddings_tsteps, feats], 1)
-    nfeats = (feats - stats['nMean_feat']) * stats['nInvStd']
+    nfeats = (feats - feat_stats['nMean_feat']) * feat_stats['nInvStd']
     nfeats = fakefix_tf(nfeats, 16, 8)
-    states = nn_train.make_states(1, zero_state=True)
+    states = nn_train.make_states(
+        batchsize=1,
+        norm_mean=feat_stats['nMean_feat'],
+        norm_inv_std=feat_stats['nInvStd'],
+        zero_state=True)
+    stream=True
 
-    est, states= nn_train(
-        nfeats,mask=1.0,
-        states=states,
-        training=False,
-        quantized=quantized)
+    if stream: # frame by frame processing for streaming application
+        nn_train = warp_tf_model(nn_train, time_steps=1)
+        est = []
+        for i in range(nfeats.shape[1]):
+            print(f"\rProcessing frame {i}/{nfeats.shape[1]}", end = '')
+            est0, states = nn_train(inputs=[nfeats[:,i:i+1,:], states])
+            est += [est0]
+        est = tf.concat(est, 1)
+    else:
+        nn_train = warp_tf_model(nn_train, time_steps=nfeats.shape[1])
+        est, states = nn_train(
+            [nfeats, states],
+            )
+    nn_train.summary()
+    print(nfeats.shape)
+    print(nfeats.numpy().min(), nfeats.numpy().max())
+    for state in states[0][0]:
+        print(state.shape)
+        print(state.numpy().min(), state.numpy().max())
+    for state in states[0][1]:
+        print(state.shape)
+        print(state.numpy().min(), state.numpy().max())
+
+    tflite_fp16_model = tflite_convert(
+        nn_train, nbit=8, path_tflite='./tflite/nnse_int8.tflite')
+    # interpreter = tf.lite.Interpreter(model_content=tflite_fp16_model)
+    # interpreter.allocate_tensors()  # Needed before execution!
+    
+    # input = interpreter.get_input_details()[0] 
+    # import pdb; pdb.set_trace()
 
     tfmask=est[0].numpy()
-    nfeats=nfeats[0].numpy()[num_context-1:,:]
-    feats=feats[0].numpy()[num_context-1:,:]
+    nfeats=nfeats[0].numpy()[num_lookahead:,:]
+    feats=feats[0].numpy()[num_lookahead:,:]
 
-    audio_out = feat_inst.istft_frame_proc(
+    if num_lookahead > 0: # non-causal
+        tfmask = tfmask[num_lookahead:,:]
+        spec_sn = spec_sn[:-num_lookahead,:]
+
+    audio_out, spec_en = feat_inst.istft_frame_proc(
         spec_sn,
         tfmask
     )
+
+    pspec_en = np.log10(np.abs(spec_en)+10**-5)
+    pspec_sn = np.log10(np.abs(spec_sn)+10**-5)
+
     name_model = re.sub(r'\.yaml', '', os.path.basename(args.config_file))
     name= re.sub(r'\.wav', '', f'{os.path.basename(wavfile)}')
 
@@ -314,25 +362,37 @@ def test(
 
     plt.subplot(3,1,1)
     plt.imshow(
-        nfeats.T,
+        pspec_en.T,
         origin      = 'lower',
         cmap        = 'pink_r',
         aspect      = 'auto')
+    plt.title('Enhanced')
+    plt.colorbar()
+
     plt.subplot(3,1,2)
     plt.imshow(
-        feats.T,
+        pspec_sn.T,
         origin      = 'lower',
         cmap        = 'pink_r',
         aspect      = 'auto')
+    plt.title('Noisy')
+    plt.colorbar()
+
     plt.subplot(3,1,3)
     plt.imshow(
         tfmask.T,
         origin      = 'lower',
         cmap        = 'pink_r',
-        aspect      = 'auto')
-    plt.savefig(f'{folder}/feat_mask.pdf')
+        aspect      = 'auto',
+        vmin=0,
+        vmax=1)
+    plt.title('TF-Mask')
+    plt.colorbar()
 
-def make_folder(config_file):
+    plt.savefig(f'{folder}/feat_mask.pdf')
+    plt.show()
+
+def make_savedModel_folder(config_file):
     """ make folder"""
     name_model = re.sub(r'\.yaml', '', os.path.basename(config_file))
     name_model = re.sub(r'config_', '', name_model)
@@ -350,6 +410,7 @@ def main(args):
     num_epoch       = args.num_epoch
     epoch_loaded    = args.epoch_loaded
     quantized       = args.quantized
+
     if args.mode == 'test':
         batchsize = 1
     tfrecord_list = {   'train' : args.train_list,
@@ -359,11 +420,12 @@ def main(args):
         config_nn = config['nn_arch']
         config_feat = config['feat']
 
-    folder_nn = make_folder(args.config_file)
+    folder_nn = make_savedModel_folder(args.config_file)
 
-    current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    train_log_dir = f'tensorboard/{folder_nn}/logs/{current_time}'
-    train_summary_writer = tf.summary.create_file_writer(train_log_dir)
+    if args.mode == 'train':
+        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        train_log_dir = f'tensorboard/{folder_nn}/logs/{current_time}'
+        train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
     dim_feat = config_nn[0]['layer_neurons']
 
@@ -390,8 +452,9 @@ def main(args):
             epoch_loaded = int(re.sub(r'_ep','',tmp.group(0)))
             epoch1_loaded = epoch_loaded + 1
         else:
+            epoch_loaded=int(epoch_loaded)
             nn_train.load_weights(
-                f'{folder_nn}/checkpoints/model_checkpoint_ep{epoch_loaded}')
+                f'{folder_nn}/checkpoints/model_checkpoint_ep{int(epoch_loaded)}')
             epoch1_loaded = epoch_loaded + 1
 
         print(f"Model at epoch {epoch1_loaded - 1} is retrieved")
@@ -416,13 +479,14 @@ def main(args):
                 fnames[tr_set] = [line.strip() for line in lines[:len0]]
 
                 fnames[tr_set] = filter_in_data(fnames[tr_set])
-                # fnames[tr_set] = fnames[tr_set][1:100] 
-    shift_step = int(np.ceil(len(fnames['train']) / batchsize))
+                # fnames[tr_set] = fnames[tr_set][1:100]
+    shift_step = BLOCKS_PER_AUDIO * (len(fnames['train']) // batchsize)
+
     lr_schedule=CosineSchedule(
-    base_lr=args.learning_rate,
-    warmup_steps=2000,
-    total_steps=shift_step*num_epoch,
-    start_step=(epoch1_loaded * shift_step))
+        base_lr=args.learning_rate,
+        warmup_steps=2000,
+        total_steps=num_epoch * shift_step,
+        start_step =epoch1_loaded * shift_step)
 
     optimizer = tf.keras.optimizers.Adam(
         # learning_rate=args.learning_rate
@@ -447,9 +511,9 @@ def main(args):
 
     if os.path.exists(f'{folder_nn}/stats.pkl'):
         with open(os.path.join(folder_nn, 'stats.pkl'), "rb") as file:
-            stats = pickle.load(file)
+            feat_stats = pickle.load(file)
     else:
-        stats = feat_stats_estimator(
+        feat_stats = feat_stats_estimator(
                 dataset_tr, fnames['train'],
                 batchsize, dim_feat, folder_nn,
                 feat_type=config['feat']['type'])
@@ -468,7 +532,7 @@ def main(args):
     print(f"Total number of parameters: {tot}")
 
     if args.mode == 'test':
-        test(args, nn_train, config,  stats, quantized)
+        test(args, nn_train, config, feat_stats, quantized)
         return
 
     for epoch in range(epoch1_loaded, num_epoch):
@@ -486,12 +550,11 @@ def main(args):
                 timesteps,
                 training        = True,
                 zero_state      = False,
-                norm_mean       = stats['nMean_feat'],
-                norm_inv_std    = stats['nInvStd'],
-                num_dnsampl     = 1,
-                num_context     = config_feat['num_context'],
+                feat_stats      = feat_stats,
+                config_feat     = config_feat,
+                epoch           = epoch,
                 quantized       = quantized,
-                feat_type       = config_feat['type'],
+                train_summary_writer=train_summary_writer,
                 )
 
         # Computing Training loss
@@ -504,12 +567,11 @@ def main(args):
             timesteps,
             training        = False,
             zero_state      = True,
-            norm_mean       = stats['nMean_feat'],
-            norm_inv_std    = stats['nInvStd'],
-            num_dnsampl     = 1,
-            num_context     = config_feat['num_context'],
+            feat_stats      = feat_stats,
+            config_feat     = config_feat,
+            epoch           = epoch,
             quantized       = quantized,
-            feat_type       = config_feat['type'],)
+            )
 
         loss['train'][epoch] = nn_train.stats_inst.stats['acc_loss'] / nn_train.stats_inst.stats['acc_steps']
         loss['train'][epoch] /= config_nn[-1]['layer_neurons']
@@ -526,12 +588,11 @@ def main(args):
             timesteps,
             training            = False,
             zero_state          = True,
-            norm_mean           = stats['nMean_feat'],
-            norm_inv_std        = stats['nInvStd'],
-            num_dnsampl         = 1,
-            num_context         = config_feat['num_context'],
+            feat_stats          = feat_stats,
+            config_feat         = config_feat,
+            epoch               = epoch,
             quantized           = quantized,
-            feat_type           = config_feat['type'],)
+            )
 
         loss['test'][epoch] = nn_train.stats_inst.stats['acc_loss'] / nn_train.stats_inst.stats['acc_steps']
         loss['test'][epoch] /= config_nn[-1]['layer_neurons']
@@ -591,18 +652,19 @@ if __name__ == "__main__":
         '-m',
         '--mode',
         default='train',
+        type=str,
         help='test or train')
 
     argparser.add_argument(
         '-tw',
         '--test_wavefile',
-        default='test_wavs/steak_hairdryer.wav',
+        default='test_wavs/keyboard_steak.wav',
         help='test_wavs')
 
     argparser.add_argument(
         '-a',
         '--config_file',
-        default='nn_arch/config_unet_relu_large_noncausal.yaml',
+        default='nn_arch/config_unet_relu_large_noncausal_sep.yaml',
         help='nn architecture')
 
     argparser.add_argument(
@@ -655,7 +717,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default="random",
+        default="latest",
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \

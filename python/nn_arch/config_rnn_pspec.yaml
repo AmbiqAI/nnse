@@ -27,6 +27,7 @@ nn_arch:
     layer_neurons: 72
     activation: sigmoid
     dropout: 0.25
+
 feat:
   type: 'pspec'
-  num_context: 6
+  num_lookahead: 0  # if !=0, it is non-causal

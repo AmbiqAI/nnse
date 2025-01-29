@@ -510,6 +510,7 @@ class FeatureClass:
         reset
         """
         self.buf *= 0
+
     def istft_frame_proc(
             self,
             data_freqs,
@@ -521,9 +522,11 @@ class FeatureClass:
         time_steps, _ = data_freqs.shape
         obuf = np.zeros(self.win_size)
         odatas = np.array([])
+        specs_en = []
         for i in range(time_steps):
             data_freq = data_freqs[i]
             data_freq = data_freq * tfmasks[i]
+            specs_en += [data_freq]
             data = np.fft.irfft(data_freq)[:self.win_size]
             wdata = data * self.win
             obuf += wdata
@@ -533,7 +536,7 @@ class FeatureClass:
             
             odatas = np.concatenate((odatas, odata))
             
-        return odatas
+        return odatas, np.array(specs_en)
     def frame_proc(self, data):
         """
         Frame process

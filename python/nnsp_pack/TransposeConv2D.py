@@ -11,6 +11,10 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
             **kwargs):
         super(SeparableTransposeConv2D, self).__init__(**kwargs)
         len_filter_freq = kernel_size[1]
+        self.upsampling2= tf.keras.layers.UpSampling2D(
+            size=(1,2),
+            interpolation='nearest'
+        )
         self.padding = tf.keras.layers.ZeroPadding2D(
             padding=((0, 0),(len_filter_freq-1,len_filter_freq-1))
         )
@@ -33,7 +37,9 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
     def call(self, inputs):
         """ Forward pass """
         # input shape = (B, T, F, C)
-        inputs_up = updsampling_by_2(inputs)
+        # inputs_up = updsampling_by_2(inputs)
+        inputs_up = self.upsampling2(inputs)
+        inputs_up = inputs_up[:,:,:-1,:]
         inputs_up = self.padding(inputs_up)
         outputs = self.depthwise(inputs_up)
         outputs = self.pointwise(outputs)
@@ -49,6 +55,10 @@ class TransposeConv2D(tf.keras.layers.Layer):
             **kwargs):
         super(TransposeConv2D, self).__init__(**kwargs)
         len_filter_freq = kernel_size[1]
+        self.upsampling2= tf.keras.layers.UpSampling2D(
+            size=(1,2),
+            interpolation='nearest'
+        )
         self.padding = tf.keras.layers.ZeroPadding2D(
             padding=((0, 0),(len_filter_freq-1,len_filter_freq-1))
         )
@@ -62,7 +72,9 @@ class TransposeConv2D(tf.keras.layers.Layer):
     def call(self, inputs):
         """ Forward pass """
         # input shape = (B, T, F, C)
-        inputs_up = updsampling_by_2(inputs)
+        # inputs_up = updsampling_by_2(inputs)
+        inputs_up = self.upsampling2(inputs)
+        inputs_up = inputs_up[:,:,:-1,:]
         inputs_up = self.padding(inputs_up)
         outputs = self.deconv(inputs_up)
         return outputs
@@ -111,10 +123,13 @@ def updsampling_by_2(inputs):
     C = shape[3]
     # copy = tf.zeros_like(inputs)
     # inputs_up = tf.concat([inputs, copy], axis=1)
-    inputs_up = tf.pad(inputs, [[0, 0], [T, 0], [0, 0], [0, 0]])
-    inputs_up = tf.transpose(inputs_up, perm=[0, 2, 1, 3])
-    inputs_up = tf.reshape(inputs_up, (B, -1, T, C))
-    inputs_up = tf.transpose(inputs_up, perm=[0, 2, 1, 3])
+    if 1: 
+        inputs_up = tf.pad(inputs, [[0, 0], [T, 0], [0, 0], [0, 0]])
+        inputs_up = tf.transpose(inputs_up, perm=[0, 2, 1, 3])
+        inputs_up = tf.reshape(inputs_up, (B, -1, T, C))
+        inputs_up = tf.transpose(inputs_up, perm=[0, 2, 1, 3])
+    else: 
+        pass
     inputs_up = inputs_up[:,:,:-1,:]
     return inputs_up
 
