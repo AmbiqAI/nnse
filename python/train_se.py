@@ -45,7 +45,7 @@ def train_kernel(
         pspec_sn,
         pspec_s,
         mask,
-        states,
+        # states,
         net,
         optimizer,
         training    = True,
@@ -56,9 +56,9 @@ def train_kernel(
     """
     with tf.GradientTape() as tape:
 
-        est, states = net(
+        est = net(
                 nfeat,
-                states,
+                # states,
                 mask=mask,
                 training    = training,
                 quantized   = quantized)
@@ -80,7 +80,7 @@ def train_kernel(
                     zip(gradients_clips,
                         net.trainable_variables))
 
-    return est, states, ave_loss, steps
+    return est, ave_loss, steps
 
 def epoch_proc(
         net,
@@ -109,21 +109,22 @@ def epoch_proc(
         """
         Reset states
         """
-        states = net.make_states(
-            batchsize,
-            norm_mean=norm_mean,
-            norm_inv_std = norm_inv_std,
-            zero_state=zero_state)
+        # states = net.make_states(
+        #     batchsize,
+        #     norm_mean=norm_mean,
+        #     norm_inv_std = norm_inv_std,
+        #     zero_state=zero_state)
+        net.reset_states(zero_state=False)
         if num_lookahead > 0: # non-causal
             shape = (batchsize, num_lookahead, net.dim_trgt)
             head_s = tf.zeros(shape, dtype = tf.float32)
             head_sn = tf.zeros(shape, dtype = tf.float32)
-        return states, head_s, head_sn
+        return head_s, head_sn
 
     total_batches =  len(fnames) // batchsize
 
     # intialize the padding for the first batch
-    states, head_pspec_s, head_pspec_sn = reset_states()
+    head_pspec_s, head_pspec_sn = reset_states()
 
     total_steps=BLOCKS_PER_AUDIO * total_batches * epoch
     for batch, data in enumerate(dataset):
@@ -151,7 +152,7 @@ def epoch_proc(
 
         if RESET_EVERY_AUDIO_CLIP:
             if batch % BLOCKS_PER_AUDIO == (BLOCKS_PER_AUDIO-1):
-                states, head_pspec_s, head_pspec_sn = reset_states()
+               head_pspec_s, head_pspec_sn = reset_states()
         if num_lookahead > 0: # non-causal
             tmp_s = tf.concat([head_pspec_s, pspec_s], 1)
             tmp_sn = tf.concat([head_pspec_sn, pspec_sn], 1)
@@ -170,14 +171,14 @@ def epoch_proc(
                     tf.identity(pspec_sn[:,start:end,:]),
                     tf.identity( pspec_s[:,start:end,:]),
                     tf.identity(   masks[:,start:end,:]),
-                    states,
+                    # states,
                     net,
                     optimizer,
                     training    = training,
                     quantized   = quantized,
                  )
 
-            _, states, ave_loss, steps = tmp
+            est, ave_loss, steps = tmp
 
             net.stats_inst.update_cost_steps(ave_loss, steps)
 
@@ -278,13 +279,13 @@ def test(
                             len_fft         = params_audio_def['len_fft'],
                             sample_rate     = params_audio_def['sample_rate'],
                             nfilters_mel    = params_audio_def['nfilters_mel'])
-
+    # feature extraction
     spec_sn, _, feat_sn, pspec_sn = feat_inst.block_proc(speech)
 
     pspec_sn_tmp = tf.constant(pspec_sn, dtype=tf.float32)
     pspec_sn_tmp = tf.expand_dims(pspec_sn_tmp, 0)
     if feat_type == 'mel':
-            feats = tf.matmul(pspec_sn_tmp, MEL_FBANKS)
+        feats = tf.matmul(pspec_sn_tmp, MEL_FBANKS)
     elif feat_type == 'pspec':
         feats = tf.identity(pspec_sn_tmp)
     feats = tf_log10_eps(feats)
@@ -292,57 +293,87 @@ def test(
 
     nfeats = (feats - feat_stats['nMean_feat']) * feat_stats['nInvStd']
     nfeats = fakefix_tf(nfeats, 16, 8)
-    states = nn_train.make_states(
-        batchsize=1,
-        norm_mean=feat_stats['nMean_feat'],
-        norm_inv_std=feat_stats['nInvStd'],
-        zero_state=True)
-    stream=True
 
+    stream=True
+    nn_train.reset_states(zero_state=True)
+    time_steps = 1 if stream else nfeats.shape[1]
+    nn_train = warp_tf_model(nn_train, time_steps=time_steps)
     if stream: # frame by frame processing for streaming application
-        nn_train = warp_tf_model(nn_train, time_steps=1)
-        est = []
+        tfmask = []
         for i in range(nfeats.shape[1]):
             print(f"\rProcessing frame {i}/{nfeats.shape[1]}", end = '')
-            est0, states = nn_train(inputs=[nfeats[:,i:i+1,:], states])
-            est += [est0]
-        est = tf.concat(est, 1)
+            est0 = nn_train(inputs=[nfeats[:,i:i+1,:]])
+            tfmask += [est0]
+        tfmask = tf.concat(tfmask, 1)
     else:
-        nn_train = warp_tf_model(nn_train, time_steps=nfeats.shape[1])
-        est, states = nn_train(
-            [nfeats, states],
+        tfmask = nn_train(
+            [nfeats],
             )
     nn_train.summary()
     print(nfeats.shape)
     print(nfeats.numpy().min(), nfeats.numpy().max())
-    for state in states[0][0]:
-        print(state.shape)
-        print(state.numpy().min(), state.numpy().max())
-    for state in states[0][1]:
-        print(state.shape)
-        print(state.numpy().min(), state.numpy().max())
 
+    # tflite
+    nbit=8
     tflite_fp16_model = tflite_convert(
-        nn_train, nbit=8, path_tflite='./tflite/nnse_int8.tflite')
-    # interpreter = tf.lite.Interpreter(model_content=tflite_fp16_model)
-    # interpreter.allocate_tensors()  # Needed before execution!
-    
-    # input = interpreter.get_input_details()[0] 
-    # import pdb; pdb.set_trace()
+        nn_train, nbit=nbit, path_tflite=f'./tflite/nnse_{nbit}.tflite')
+    interpreter = tf.lite.Interpreter(model_content=tflite_fp16_model)
+    interpreter.allocate_tensors()  # Needed before execution!
 
-    tfmask=est[0].numpy()
+    # Get input and output tensors.
+    input_details = interpreter.get_input_details()[0]
+    output_details = interpreter.get_output_details()[0]
+
+    # Test the model on random input data.
+    input_shape = input_details['shape']
+
+    nfeat_np = nfeats.numpy()
+
+    input_scale, input_zero_point = input_details["quantization"]
+    nfeat_np = nfeat_np / input_scale + input_zero_point
+
+    if nbit== 8:
+        nfeat_np = nfeat_np.astype(np.int8)
+    elif nbit== 16:
+        nfeat_np = nfeat_np.astype(np.int16)
+
+    out = []
+    for i in range(nfeat_np.shape[1]):
+        print(f"\rProcessing frame {i}/{nfeat_np.shape[1]}", end = '')
+
+        input_data = nfeat_np[:,i:i+1,:]
+        interpreter.set_tensor(input_details['index'], input_data)
+
+        interpreter.invoke()
+
+        # The function `get_tensor()` returns a copy of the tensor data.
+        # Use `tensor()` in order to get a pointer to the tensor.
+        output_data = interpreter.get_tensor(output_details['index'])
+        out += [output_data]
+    out= np.concatenate(out, 1)[0]
+
+    if nbit in (8, 16):
+        output_scale, output_zero_point = output_details["quantization"]
+        out = (out - output_zero_point).astype(np.float32) * output_scale
+
+    tfmask_lite=out
+    tfmask=tfmask[0].numpy()
     nfeats=nfeats[0].numpy()[num_lookahead:,:]
     feats=feats[0].numpy()[num_lookahead:,:]
 
     if num_lookahead > 0: # non-causal
         tfmask = tfmask[num_lookahead:,:]
+        tfmask_lite = tfmask_lite[num_lookahead:,:]
         spec_sn = spec_sn[:-num_lookahead,:]
 
     audio_out, spec_en = feat_inst.istft_frame_proc(
         spec_sn,
         tfmask
     )
-
+    audio_out_lite, spec_en_lite = feat_inst.istft_frame_proc(
+        spec_sn,
+        tfmask_lite
+    )
     pspec_en = np.log10(np.abs(spec_en)+10**-5)
     pspec_sn = np.log10(np.abs(spec_sn)+10**-5)
 
@@ -360,7 +391,7 @@ def test(
     plt.figure(1)
     plt.clf()
 
-    plt.subplot(3,1,1)
+    plt.subplot(4,1,1)
     plt.imshow(
         pspec_en.T,
         origin      = 'lower',
@@ -369,7 +400,7 @@ def test(
     plt.title('Enhanced')
     plt.colorbar()
 
-    plt.subplot(3,1,2)
+    plt.subplot(4,1,2)
     plt.imshow(
         pspec_sn.T,
         origin      = 'lower',
@@ -377,8 +408,7 @@ def test(
         aspect      = 'auto')
     plt.title('Noisy')
     plt.colorbar()
-
-    plt.subplot(3,1,3)
+    plt.subplot(4,1,3)
     plt.imshow(
         tfmask.T,
         origin      = 'lower',
@@ -388,8 +418,18 @@ def test(
         vmax=1)
     plt.title('TF-Mask')
     plt.colorbar()
+    plt.subplot(4,1,4)
+    plt.imshow(
+        tfmask_lite.T,
+        origin      = 'lower',
+        cmap        = 'pink_r',
+        aspect      = 'auto',
+        vmin=0,
+        vmax=1)
+    plt.title(f'TF-Mask ({nbit} bit) (tflite)')
+    plt.colorbar()
 
-    plt.savefig(f'{folder}/feat_mask.pdf')
+    plt.savefig(f'{folder}/feat_mask_{nbit}bit.pdf')
     plt.show()
 
 def make_savedModel_folder(config_file):
@@ -410,11 +450,39 @@ def main(args):
     num_epoch       = args.num_epoch
     epoch_loaded    = args.epoch_loaded
     quantized       = args.quantized
+    tfrecord_list = {   'train' : args.train_list,
+                        'test'  : args.test_list}
+    fnames = {}
+    for tr_set in ['train', 'test']:
+        with open(tfrecord_list[tr_set], 'r') as file: # pylint: disable=unspecified-encoding
+            try:
+                lines = file.readlines()
+            except:# pylint: disable=bare-except
+                print(f'Can not find the list {tfrecord_list[tr_set]}')
+            else:
+                len0 = int(len(lines) / batchsize) * batchsize
+                fnames[tr_set] = [line.strip() for line in lines[:len0]]
+
+                fnames[tr_set] = filter_in_data(fnames[tr_set])
+                # fnames[tr_set] = fnames[tr_set][1:100]
+    _, dataset = tfrecords_pipeline(
+            fnames['train'],
+            batchsize = batchsize,
+            is_shuffle = True)
+
+    _, dataset_tr = tfrecords_pipeline(
+            fnames['train'],
+            batchsize = batchsize,
+            is_shuffle = False)
+
+    _, dataset_te = tfrecords_pipeline(
+            fnames['test'],
+            batchsize = batchsize,
+            is_shuffle = False)
 
     if args.mode == 'test':
         batchsize = 1
-    tfrecord_list = {   'train' : args.train_list,
-                        'test'  : args.test_list}
+
     with open(args.config_file) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
         config_nn = config['nn_arch']
@@ -432,11 +500,24 @@ def main(args):
         unroll_rnn=False
     else:
         unroll_rnn=True
+        
+    if os.path.exists(f'{folder_nn}/stats.pkl'):
+        with open(os.path.join(folder_nn, 'stats.pkl'), "rb") as file:
+            feat_stats = pickle.load(file)
+    else:
+        feat_stats = feat_stats_estimator(
+                dataset_tr, fnames['train'],
+                batchsize, dim_feat, folder_nn,
+                feat_type=config['feat']['type'])
+    
     nn_train = NeuralNetClass(
         config=config_nn,
         batchsize   = batchsize,
-        unroll_rnn=unroll_rnn)
-
+        unroll_rnn=unroll_rnn,
+        norm_mean=feat_stats['nMean_feat'],
+        norm_inv_std=feat_stats['nInvStd'],
+        )
+    # import pdb; pdb.set_trace()
     if epoch_loaded == 'random':
         epoch_loaded = -1
 
@@ -471,19 +552,7 @@ def main(args):
         print(f"(train) best epoch picked by loss = {np.argmin(loss['train'][0: epoch_loaded+1])}")
         print(f"(test)  best epoch picked by loss = {np.argmin(loss['test'][0: epoch_loaded+1])}")
 
-    fnames = {}
-    for tr_set in ['train', 'test']:
-        with open(tfrecord_list[tr_set], 'r') as file: # pylint: disable=unspecified-encoding
-            try:
-                lines = file.readlines()
-            except:# pylint: disable=bare-except
-                print(f'Can not find the list {tfrecord_list[tr_set]}')
-            else:
-                len0 = int(len(lines) / batchsize) * batchsize
-                fnames[tr_set] = [line.strip() for line in lines[:len0]]
-
-                fnames[tr_set] = filter_in_data(fnames[tr_set])
-                # fnames[tr_set] = fnames[tr_set][1:100]
+    
     shift_step = BLOCKS_PER_AUDIO * (len(fnames['train']) // batchsize)
 
     lr_schedule=CosineSchedule(
@@ -497,30 +566,6 @@ def main(args):
         learning_rate=lr_schedule,
         weight_decay=0.1
         )
-    _, dataset = tfrecords_pipeline(
-            fnames['train'],
-            batchsize = batchsize,
-            is_shuffle = True)
-
-    _, dataset_tr = tfrecords_pipeline(
-            fnames['train'],
-            batchsize = batchsize,
-            is_shuffle = False)
-
-    _, dataset_te = tfrecords_pipeline(
-            fnames['test'],
-            batchsize = batchsize,
-            is_shuffle = False)
-
-
-    if os.path.exists(f'{folder_nn}/stats.pkl'):
-        with open(os.path.join(folder_nn, 'stats.pkl'), "rb") as file:
-            feat_stats = pickle.load(file)
-    else:
-        feat_stats = feat_stats_estimator(
-                dataset_tr, fnames['train'],
-                batchsize, dim_feat, folder_nn,
-                feat_type=config['feat']['type'])
 
     # nn_np = c_code_table_converter.tf2np(nn_train, quantized=quantized)
     # if DISPLAY_HISTOGRAM:

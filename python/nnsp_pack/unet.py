@@ -64,8 +64,12 @@ class encoder_unet(tf.keras.layers.Layer):
             num_chs=[1, 2, 4, 8, 16],
             separable=False,
             activation='tanh',
+            norm_mean=None,
+            norm_inv_std=None,
             **kwargs):
         super(encoder_unet, self).__init__(**kwargs)
+        self.norm_mean = norm_mean
+        self.norm_inv_std = norm_inv_std
         self.units = output_size
         self.batch_size = batch_size
         self.convs=[]
@@ -74,7 +78,7 @@ class encoder_unet(tf.keras.layers.Layer):
         self.freq_bins,_ = get_unet_info(num_chs)
         # self.freq_bins = [257, 128, 63, 31, 15]
         stages = len(self.num_chs) - 1
-
+        self.states = self.make_states()
         for i , num_ch, num_ch_in in zip(range(stages), self.num_chs[1:], self.num_chs[:-1]):
 
             layer=tf.keras.Sequential(name=f"encoder_{i}")
@@ -104,15 +108,46 @@ class encoder_unet(tf.keras.layers.Layer):
             self.convs += [layer]
 
     def make_states(
-            self,
-            norm_mean=None,
-            norm_inv_std=None):
+            self):
         """ Make states"""
         states = []
-        if norm_mean is not None:
+        if self.norm_mean is not None:
             shape = (1, 1, -1, 1)
-            norm_mean = tf.reshape(norm_mean, shape)
-            norm_inv_std = tf.reshape(norm_inv_std, shape)
+            norm_mean = tf.reshape(self.norm_mean, shape)
+            norm_inv_std = tf.reshape(self.norm_inv_std, shape)
+        else:
+            norm_mean = self.norm_mean
+            norm_inv_std = self.norm_inv_std
+        len_pad = self.kernel_size_time - 1
+
+        for i, da in enumerate(zip(self.num_chs[:-1], self.freq_bins[:-1])):
+            num_ch, freq_bin = da
+            shape = (self.batch_size, len_pad, freq_bin, num_ch)
+            if i==0:
+                state = tf.fill(shape, tf.math.log(2**-15) / tf.math.log(10.0))
+                
+                if norm_mean is not None:
+                    state = (state - norm_mean) * norm_inv_std
+                state = tf.Variable(state, trainable=False) # for eager mode
+                states += [state]
+            else:
+                state=tf.zeros(shape)
+                state = tf.Variable(state, trainable=False) # for eager mode
+                states += [state]
+
+        return states
+
+    def reset_states(
+            self):
+        """ Reset states"""
+
+        if self.norm_mean is not None:
+            shape = (1, 1, -1, 1)
+            norm_mean = tf.reshape(self.norm_mean, shape)
+            norm_inv_std = tf.reshape(self.norm_inv_std, shape)
+        else:
+            norm_mean = self.norm_mean
+            norm_inv_std = self.norm_inv_std
 
         len_pad = self.kernel_size_time - 1
 
@@ -121,33 +156,37 @@ class encoder_unet(tf.keras.layers.Layer):
             shape = (self.batch_size, len_pad, freq_bin, num_ch)
             if i==0:
                 state = tf.fill(shape, tf.math.log(2**-15) / tf.math.log(10.0))
-
+                
                 if norm_mean is not None:
                     state = (state - norm_mean) * norm_inv_std
-
-                states += [state]
+                state = tf.Variable(state, trainable=False) # for eager mode
+                self.states[i].assign(state)
             else:
-                states += [tf.zeros(shape)]
-
-        return states
-
+                state=tf.zeros(shape)
+                state = tf.Variable(state, trainable=False) # for eager mode
+                self.states[i].assign(state)
     def call(
             self,
             inputs,
-            states,
+            # states,
             training=False):
         """ Forward pass"""
 
         x = inputs
         outputs= []
-        states_udpate=[]
-        for state, net in zip(states, self.convs):
-            states_udpate += [tf.identity(x[:,-(self.kernel_size_time-1):,:,:])]
+        # states_udpate=[]
+        for i, layer_info in enumerate(zip(self.states, self.convs)):
+            state, net = layer_info
+            state_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
+            # self.states[i].assign(x[:,-(self.kernel_size_time-1):,:,:])
+            # states_udpate += [x[:,-(self.kernel_size_time-1):,:,:]]
             x = tf.concat([state, x], axis=1)
             x = net(x)
+            self.states[i].assign(state_update)
             outputs+= [x]
 
-        return outputs, states_udpate
+        # self.states = states_udpate
+        return outputs
 
 class decoder_unet(tf.keras.layers.Layer):
     """ Decoder of UNet"""
@@ -170,6 +209,7 @@ class decoder_unet(tf.keras.layers.Layer):
         # self.freq_bins = [257, 128, 63, 31, 15]
         self.convs=[]
         stages = len(self.num_chs) - 1
+        self.states=self.make_states()
         # input shape (batch, T, Freq, 1)
         # self.pad_freq_bins = [0,1, 0, 0]
         for i, num_ch, num_ch_in in zip(range(stages), self.num_chs[:-1], self.num_chs[1:]):
@@ -217,36 +257,53 @@ class decoder_unet(tf.keras.layers.Layer):
 
             self.convs = [layer] + self.convs # reverse the order
 
-
     def call(
             self,
             x,
             inputs_dec,
-            states=None,
+            # states=None,
             training=False):
         """ Forward pass"""
-        states_update=[]
-        for encode, net, state in zip(inputs_dec[::-1], self.convs, states):
-            states_update += [tf.identity(x[:,-(self.kernel_size_time-1):,:,:])]
-            x = tf.concat([state, x], axis=1)
-            encode = tf.pad( # padding encode on time axis
-                encode,
-                [[0, 0], [self.kernel_size_time-1, 0], [0, 0], [0, 0]])
-            comb = tf.concat([encode, x], axis=-1) # skip connection
+
+        for i, layer_info in enumerate(zip(inputs_dec[::-1], self.convs, self.states)):
+
+            encode, net, state = layer_info
+            state_en, state_de = state
+            state_en_update=tf.identity(encode[:,-(self.kernel_size_time-1):,:,:])
+            state_de_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
+
+            encode = tf.concat([state_en, encode], axis=1) # time concatenation
+            x = tf.concat([state_de, x], axis=1) # time concatenation
+
+            comb = tf.concat([encode, x], axis=-1) # skip connection (channel concatenation)
 
             x = net(comb)
 
-        return x, states_update
+            self.states[i][0].assign(state_en_update)
+            self.states[i][1].assign(state_de_update)
+        return x
 
     def make_states(self):
         """ Make states"""
         len_pad = self.kernel_size_time - 1
 
-        states = []
+        states=[]
         for num_ch, freq_bin in zip(self.num_chs[1:], self.freq_bins[1:]):
             # reverse the order
-            states = [tf.zeros((self.batch_size, len_pad, freq_bin, num_ch))] + states
+            state_en = tf.zeros((self.batch_size, len_pad, freq_bin, num_ch))
+            state_en = tf.Variable(state_en, trainable=False) # for eager mode
+            state_de = tf.zeros((self.batch_size, len_pad, freq_bin, num_ch))
+            state_de = tf.Variable(state_de, trainable=False) # for eager mode
+
+            states = [(state_en, state_de)] + states
+
         return states
+
+    def reset_state(self):
+        """ Reset states"""
+        for state in self.states:
+            state[0].assign(state[0] * 0)
+            state[1].assign(state[1] * 0)
 
 class unet(tf.keras.layers.Layer):
     """ UNet"""
@@ -260,6 +317,8 @@ class unet(tf.keras.layers.Layer):
             separable=False,
             activation='relu',
             unroll_rnn=False,
+            norm_mean=None,
+            norm_inv_std=None,
             **kwargs):
         super(unet,self).__init__(**kwargs)
 
@@ -273,7 +332,9 @@ class unet(tf.keras.layers.Layer):
             kernel_size_time=kernel_size_time,
             num_chs=self.num_chs,
             separable=separable,
-            activation=activation)
+            activation=activation,
+            norm_mean=norm_mean,
+            norm_inv_std=norm_inv_std)
         self.decoder = decoder_unet(
             output_size=output_size,
             batch_size=batch_size,
@@ -282,35 +343,78 @@ class unet(tf.keras.layers.Layer):
             separable=separable,
             activation= activation)
         self.batch_size=batch_size
-        self.F = 15
+
+        self.freq_bins, self.pad_freq_bins = get_unet_info(num_chs)
+        self.F=self.freq_bins[-1]
         self.chs=self.num_chs[-1]
+        self.states = self.make_states()
         self.rnn = tf.keras.layers.LSTM(
             self.F * self.chs,
-            stateful=True,
+            return_state=True,
+            # stateful=True,
             unroll=unroll_rnn,
             return_sequences=True)
 
-    def make_states(
-            self,
-            norm_mean=None,
-            norm_inv_std=None):
+    def reset_states(self, zero_state=False):
+        """ Reset states"""
+        h_states = tf.Variable(
+                            tf.random.uniform(
+                                [self.batch_size, self.F * self.chs],
+                                minval=-1,
+                                maxval=1),
+                            dtype = tf.float32,
+                            trainable = False)
+
+        c_states = tf.Variable(
+                            tf.random.truncated_normal(
+                                [self.batch_size, self.F * self.chs],
+                                mean=0.0,
+                                stddev=tf.sqrt(1 / self.F * self.chs)),
+                            dtype = tf.float32,
+                            trainable = False)
+        if zero_state:
+            h_states.assign(h_states * 0)
+            c_states.assign(c_states * 0)
+        self.states[0].assign(h_states)
+        self.states[1].assign(c_states)
+        self.encoder.reset_states()
+        self.decoder.reset_state()
+
+    def make_states(self, zero_state=False):
         """ Make states"""
-        states_en = self.encoder.make_states(norm_mean,norm_inv_std)
-        states_de = self.decoder.make_states()
-        return states_en, states_de
+
+        h_states = tf.Variable(
+                            tf.random.uniform(
+                                [self.batch_size, self.F * self.chs],
+                                minval=-1,
+                                maxval=1),
+                            dtype = tf.float32,
+                            trainable = False)
+
+        c_states = tf.Variable(
+                            tf.random.truncated_normal(
+                                [self.batch_size, self.F * self.chs],
+                                mean=0.0,
+                                stddev=tf.sqrt(1 / self.F * self.chs)),
+                            dtype = tf.float32,
+                            trainable = False)
+        if zero_state:
+            h_states.assign(h_states * 0)
+            c_states.assign(c_states * 0)
+
+        return (h_states, c_states)
 
     def call(
             self,
             inputs,
-            states=None,
+            # states=None,
             training=False):
         """ Forward pass"""
-
         x = inputs
-        states_en, states_de = states
+        # states_de = states
 
         # encoder
-        outputs, states_en = self.encoder(x, states_en)
+        outputs = self.encoder(x)
 
         # bottleneck rnn
         T = tf.shape(outputs[-1])[1]
@@ -318,15 +422,19 @@ class unet(tf.keras.layers.Layer):
         out = tf.reshape(
             outputs[-1],
             (self.batch_size, T, -1))
-        out = self.rnn(out)
+        out, h_state, c_state = self.rnn(out, initial_state=self.states)
 
+        self.states[0].assign(h_state)
+        self.states[1].assign(c_state)
         input_dec = tf.reshape(
             out,
             (self.batch_size, T, self.F, self.chs))
 
         # decoder
-        output, states_de = self.decoder(input_dec, outputs,states_de)
-        return output, (states_en, states_de)
+        output = self.decoder(
+            input_dec,
+            outputs)
+        return output
 
 def get_unet_info(
         num_chs: list = [1, 2, 4, 8, 16],

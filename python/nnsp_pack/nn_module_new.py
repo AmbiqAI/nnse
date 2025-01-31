@@ -18,9 +18,14 @@ class NeuralNetClass(tf.keras.Model):
             self,
             config                 = None,
             batchsize              = 300,
-            unroll_rnn             = False,):
+            unroll_rnn             = False,
+            norm_mean              = None,
+            norm_inv_std           = None,
+            ):
 
         super(NeuralNetClass, self).__init__()
+        self.norm_mean = norm_mean
+        self.norm_inv_std = norm_inv_std
         self.config = config
         self.dim_trgt = config[-1]['layer_neurons']
         self.dim_feat = config[0]['layer_neurons']
@@ -43,7 +48,7 @@ class NeuralNetClass(tf.keras.Model):
         self.dropout_layers = []
         self.kernel_size = []
         self.kernel_size_time = 1
-
+        
         for da_former, da in zip(config[:-1], config[1:]):
             neuron_i = da_former['layer_neurons']
             neuron_o = da['layer_neurons']
@@ -113,7 +118,10 @@ class NeuralNetClass(tf.keras.Model):
                     num_chs = da['num_chs'],
                     kernel_size_time = da['kernel_size_time'],
                     activation=activation,
-                    unroll_rnn=unroll_rnn)
+                    unroll_rnn=unroll_rnn,
+                    norm_mean=norm_mean,
+                    norm_inv_std=norm_inv_std,
+                    )
                 self.kernel_size_time = da['kernel_size_time']
 
             else:
@@ -123,7 +131,7 @@ class NeuralNetClass(tf.keras.Model):
             noise_shape=(None,1, None)
             self.dropout_layers+= [layers.Dropout(drop_rate, noise_shape = noise_shape)]
 
-
+        self.states= self.make_states(batchsize, norm_mean, norm_inv_std)
         self.stats_inst = statsClass(self.dim_trgt)
         self.weight_change = [
             tf.Variable(0, dtype = tf.float32, trainable = False)
@@ -135,7 +143,7 @@ class NeuralNetClass(tf.keras.Model):
     def call(
         self,
         data_in,
-        states,
+        # states,
         mask=1.0,
         training = False,
         quantized = False):
@@ -147,18 +155,18 @@ class NeuralNetClass(tf.keras.Model):
         # add the last dim to include channel (batches, timesteps, dim_feat, numCh = 1)
         out = self.input_layer(data_in)
 
-        states_out=[]
+        # states_out=[]
         for i, layer_info in enumerate(zip(self.nn_layers, self.config[1:])):
             subnet, config = layer_info
             layer_type=config['layer_type']
-            state = states[i]
+            state = self.states[i]
             drop_layer = self.dropout_layers[i]
             out = drop_layer(out, training = training)
 
             if layer_type == 'conv1d':
                 num_context = self.kernel_size[i][0]
                 out = tf.concat([state, out], axis=-1)
-                states_out += [out[:,-(num_context-1):,:]]
+                # states_out += [out[:,-(num_context-1):,:]]
                 out = tf.expand_dims(out,3)
                 out = subnet(out, training = training) # (batches, timesteps, 1, neurons[1])
                 out = out[:, :, 0, :]
@@ -168,39 +176,42 @@ class NeuralNetClass(tf.keras.Model):
                 out = subnet(out, training = training) # (batches, timesteps, dim_feat, num_filters)
                 shape = tf.shape(out)
                 out = tf.reshape(out, [shape[0], shape[1],-1])
-                states_out += [state]
+                # states_out += [state]
 
             elif layer_type == 'lstm':
                 h_state, c_state = state
-                out, h_state, c_state = subnet(
+                out, h_state_update, c_state_update = subnet(
                                 out,
                                 initial_state = (h_state, c_state),
                                 training = training)
-                states_out += [(h_state, c_state)]
+                h_state.assign(h_state_update)
+                c_state.assign(c_state_update)
+                # states_out += [(h_state, c_state)]
 
             elif layer_type == 'minGRU':
                 out = subnet(out, return_states=False)
-                states_out += [state]
+                # states_out += [state]
             elif layer_type == 'unet':
                 out = tf.expand_dims(out,-1)
-                out, states_unet = subnet(out, state, training=training)
+                out = subnet(out, training=training)
                 out = out[:,:,:,0]
-                states_out += [states_unet]
+                # states_out += [states_unet]
             else:
                 out = subnet(out, training=training)
-                states_out += [state]
+                # states_out += [state]
 
         out *= mask
         self.update_limited_quantizated(quantized)
 
-        return out, states_out
+        return out
+
 
     def build_nn(self, quantized=False, batch_size=32):
         """
         Build your nn. This will provide the physical weight table.
         """
         timesteps=500
-        states = self.make_states(batchsize = batch_size, zero_state = False)
+        # states = self.make_states(batchsize = batch_size, zero_state = False)
 
         inputs = tf.constant(
             np.random.randn(
@@ -211,7 +222,6 @@ class NeuralNetClass(tf.keras.Model):
         masks = 1
         self.call(
             inputs,
-            states,
             quantized=quantized)
 
     def make_states(
@@ -232,12 +242,12 @@ class NeuralNetClass(tf.keras.Model):
             layer_type = config_o['layer_type']
             if layer_type == 'lstm':
                 h_states = tf.Variable(
-                            tf.random.truncated_normal(
+                            tf.random.uniform(
                                 [batchsize, neuron_out],
-                                stddev=1/np.sqrt(neuron_in)),
+                                minval = -1.0,
+                                maxval = 1.0),
                             dtype = tf.float32,
                             trainable = False)
-                # h_states.assign( tf.minimum(tf.maximum(h_states, -1.0), 1.0-2**-15) )
                 c_states = tf.Variable(
                             tf.random.truncated_normal([batchsize, neuron_out]),
                             dtype = tf.float32,
@@ -257,14 +267,46 @@ class NeuralNetClass(tf.keras.Model):
                 states += [state]
 
             elif layer_type == 'unet':
-                state = self.nn_layers[i].make_states(norm_mean,norm_inv_std)
-                states += [state]
+                states += [ self.nn_layers[i].states]
 
             else:
                 states += [tf.zeros((batchsize, 1,1), dtype = tf.float32)]
 
         return states
 
+    def reset_states(self, zero_state):
+        """
+        Reset the states
+        """
+        for i, layer_info in enumerate(zip(self.nn_layers, self.config[1:])):
+            subnet, config = layer_info
+            layer_type = config['layer_type']
+            if layer_type == 'lstm':
+                h_states, c_states = self.states[i]
+                h = tf.Variable(
+                            tf.random.uniform(
+                                h_states.shape,
+                                minval = -1.0,
+                                maxval = 1.0),
+                            dtype = tf.float32,
+                            trainable = False)
+                c = tf.Variable(
+                            tf.random.truncated_normal(
+                                c_states.shape),
+                            dtype = tf.float32,
+                            trainable = False)
+                if zero_state:
+                    h_states.assign(h * 0)
+                    c_states.assign(c * 0)
+            elif layer_type == 'conv1d':
+                shape = self.states[i].shape
+                state = tf.fill(shape, tf.math.log(2**-15) / tf.math.log(10.0))
+                if self.norm_mean is not None:
+                    state = (state - self.norm_mean) * self.norm_inv_std
+                self.states[i].assign(state)
+            elif layer_type == 'unet':
+                subnet.reset_states(zero_state=zero_state)
+    
     def quantized_weight(self):
         """
         Quantize the weight
