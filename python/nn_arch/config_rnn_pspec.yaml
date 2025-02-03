@@ -3,7 +3,7 @@ nn_arch:
 
   - layer_type: conv1d # layer 0
     filters: 72
-    kernel_size: [6, 257]
+    kernel_size: 6
     dropout: 0.1
     activation: relu
     layer_neurons: 257

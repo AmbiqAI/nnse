@@ -240,45 +240,42 @@ def test(
         args,
         nn_train,
         config,
-        feat_stats,
-        quantized):
+        feat_stats):
     """ test function"""
     from nnsp_pack.feature_module import FeatureClass, display_stft_all
     from nnsp_pack.basic_dsp import dc_remove
     from nnsp_pack.tflite_convert import warp_tf_model, tflite_convert
     import soundfile as sf
     import librosa
-
-    num_lookahead = config['feat']['num_lookahead']
-    dim_feat = config['nn_arch'][0]['layer_neurons']
-    feat_type = config['feat']['type']
-    wavfile = args.test_wavefile
-    # wavfile = 'test_wavs/steak_hairdryer.wav'
-
-    audio, fs = sf.read(wavfile)
-    if audio.ndim > 1:
-        audio=audio[:,0]
-    if fs > 16000:
-        audio = librosa.resample(
-                audio,
-                orig_sr=fs,
-                target_sr=16000)
-
-    speech = dc_remove(audio)
-
     params_audio_def = {
         'win_size'      : 480,
         'hop'           : 160,
         'len_fft'       : 512,
         'sample_rate'   : 16000,
         'nfilters_mel'  : 72 }
+    num_lookahead = config['feat']['num_lookahead']
+    dim_feat = config['nn_arch'][0]['layer_neurons']
+    feat_type = config['feat']['type']
+    wavfile = args.test_wavefile
+    # wavfile = 'test_wavs/steak_hairdryer.wav'
+    fs_trgt = params_audio_def['sample_rate']
+    audio, fs = sf.read(wavfile)
+    if audio.ndim > 1:
+        audio=audio[:,0]
+    if fs > fs_trgt:
+        audio = librosa.resample(
+                audio,
+                orig_sr=fs,
+                target_sr=fs_trgt)
 
-    feat_inst      = FeatureClass(
-                            win_size        = params_audio_def['win_size'],
-                            hop             = params_audio_def['hop'],
-                            len_fft         = params_audio_def['len_fft'],
-                            sample_rate     = params_audio_def['sample_rate'],
-                            nfilters_mel    = params_audio_def['nfilters_mel'])
+    speech = dc_remove(audio)
+
+    feat_inst = FeatureClass(
+                    win_size        = params_audio_def['win_size'],
+                    hop             = params_audio_def['hop'],
+                    len_fft         = params_audio_def['len_fft'],
+                    sample_rate     = params_audio_def['sample_rate'],
+                    nfilters_mel    = params_audio_def['nfilters_mel'])
     # feature extraction
     spec_sn, _, feat_sn, pspec_sn = feat_inst.block_proc(speech)
 
@@ -314,10 +311,13 @@ def test(
     print(nfeats.numpy().min(), nfeats.numpy().max())
 
     # tflite
-    nbit=8
+    dtype=args.dtype_tflite
     tflite_fp16_model = tflite_convert(
-        nn_train, nbit=nbit, path_tflite=f'./tflite/nnse_{nbit}.tflite')
-    interpreter = tf.lite.Interpreter(model_content=tflite_fp16_model)
+        nn_train,
+        dtype=dtype,
+        path_tflite=f'./tflite/nnse_{dtype}.tflite')
+    interpreter = tf.lite.Interpreter(
+        model_content=tflite_fp16_model)
     interpreter.allocate_tensors()  # Needed before execution!
 
     # Get input and output tensors.
@@ -329,20 +329,22 @@ def test(
 
     nfeat_np = nfeats.numpy()
 
-    input_scale, input_zero_point = input_details["quantization"]
-    nfeat_np = nfeat_np / input_scale + input_zero_point
+    if dtype in ("int8", "int16"):
+        input_scale, input_zero_point = input_details["quantization"]
+        nfeat_np = nfeat_np / input_scale + input_zero_point
+        if dtype == "int8":
+            nfeat_np = nfeat_np.astype(np.int8)
+        elif dtype == "int16":
+            nfeat_np = nfeat_np.astype(np.int16)
 
-    if nbit== 8:
-        nfeat_np = nfeat_np.astype(np.int8)
-    elif nbit== 16:
-        nfeat_np = nfeat_np.astype(np.int16)
-
+    # run tflite inference on true data
     out = []
     for i in range(nfeat_np.shape[1]):
         print(f"\rProcessing frame {i}/{nfeat_np.shape[1]}", end = '')
-
         input_data = nfeat_np[:,i:i+1,:]
-        interpreter.set_tensor(input_details['index'], input_data)
+        interpreter.set_tensor(
+            input_details['index'],
+            input_data)
 
         interpreter.invoke()
 
@@ -350,9 +352,10 @@ def test(
         # Use `tensor()` in order to get a pointer to the tensor.
         output_data = interpreter.get_tensor(output_details['index'])
         out += [output_data]
-    out= np.concatenate(out, 1)[0]
 
-    if nbit in (8, 16):
+    out = np.concatenate(out, axis=1)[0]
+
+    if dtype in ("int8", "int16"):
         output_scale, output_zero_point = output_details["quantization"]
         out = (out - output_zero_point).astype(np.float32) * output_scale
 
@@ -368,12 +371,9 @@ def test(
 
     audio_out, spec_en = feat_inst.istft_frame_proc(
         spec_sn,
-        tfmask
-    )
-    audio_out_lite, spec_en_lite = feat_inst.istft_frame_proc(
-        spec_sn,
         tfmask_lite
     )
+
     pspec_en = np.log10(np.abs(spec_en)+10**-5)
     pspec_sn = np.log10(np.abs(spec_sn)+10**-5)
 
@@ -382,14 +382,19 @@ def test(
 
     folder=f'test_results/{name_model}/{name}'
     os.makedirs(folder, exist_ok=True)
-    sf.write(f'{folder}/noisy.wav', speech, 16000)
-    sf.write(f'{folder}/enhance.wav', audio_out, 16000)
+    sf.write(
+        f'{folder}/noisy.wav',
+        speech,
+        fs_trgt)
+    sf.write(
+        f'{folder}/enhance_{dtype}.wav',
+        audio_out,
+        fs_trgt)
 
-    print(f'Check your noisy speech in test_results/{name}/noisy.wav')
-    print(f'Check your enhanced speeech in test_results/{name}/enhance.wav')
+    print(f'Check your noisy speech in test_results/{name}/noisy_{dtype}.wav')
+    print(f'Check your enhanced speeech in test_results/{name}/enhance_{dtype}.wav')
 
     plt.figure(1)
-    plt.clf()
 
     plt.subplot(4,1,1)
     plt.imshow(
@@ -416,7 +421,7 @@ def test(
         aspect      = 'auto',
         vmin=0,
         vmax=1)
-    plt.title('TF-Mask')
+    plt.title('Reference TF-Mask (float32)')
     plt.colorbar()
     plt.subplot(4,1,4)
     plt.imshow(
@@ -425,12 +430,11 @@ def test(
         cmap        = 'pink_r',
         aspect      = 'auto',
         vmin=0,
-        vmax=1)
-    plt.title(f'TF-Mask ({nbit} bit) (tflite)')
+        vmax=1,)
+    plt.title(f'TF-Mask ({dtype}) (tflite)')
     plt.colorbar()
 
-    plt.savefig(f'{folder}/feat_mask_{nbit}bit.pdf')
-    plt.show()
+    plt.savefig(f'{folder}/feat_mask_{dtype}.pdf')
 
 def make_savedModel_folder(config_file):
     """ make folder"""
@@ -496,11 +500,8 @@ def main(args):
         train_summary_writer = tf.summary.create_file_writer(train_log_dir)
 
     dim_feat = config_nn[0]['layer_neurons']
-    if args.mode=='train':
-        unroll_rnn=False
-    else:
-        unroll_rnn=True
-        
+    unroll_rnn=False if args.mode=='train' else True
+
     if os.path.exists(f'{folder_nn}/stats.pkl'):
         with open(os.path.join(folder_nn, 'stats.pkl'), "rb") as file:
             feat_stats = pickle.load(file)
@@ -509,7 +510,7 @@ def main(args):
                 dataset_tr, fnames['train'],
                 batchsize, dim_feat, folder_nn,
                 feat_type=config['feat']['type'])
-    
+
     nn_train = NeuralNetClass(
         config=config_nn,
         batchsize   = batchsize,
@@ -581,7 +582,11 @@ def main(args):
     print(f"Total number of parameters: {tot}")
 
     if args.mode == 'test':
-        test(args, nn_train, config, feat_stats, quantized)
+        test(
+            args,
+            nn_train,
+            config,
+            feat_stats)
         return
 
     for epoch in range(epoch1_loaded, num_epoch):
@@ -703,6 +708,14 @@ if __name__ == "__main__":
         default='train',
         type=str,
         help='test or train')
+
+    argparser.add_argument(
+        '-dt',
+        '--dtype_tflite',
+        default='int16',
+        type=str,
+        help='data type to convert tflite \
+            int16, int8, or float16 or float32')
 
     argparser.add_argument(
         '-tw',

@@ -10,6 +10,7 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
             activation=None,
             **kwargs):
         super(SeparableTransposeConv2D, self).__init__(**kwargs)
+        kernel_initializer = "he_normal" if activation in ('relu', 'relu6') else "glorot_uniform"
         len_filter_freq = kernel_size[1]
         self.upsampling2= tf.keras.layers.UpSampling2D(
             size=(1,2),
@@ -24,14 +25,14 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
             padding='valid',
             groups=num_channels_in,
             use_bias=False,
-            kernel_initializer='he_normal')
+            kernel_initializer=kernel_initializer)
         self.pointwise = tf.keras.layers.Conv2D(
             filters=filters,
             kernel_size=(1, 1),
             strides=(1, 1),
             padding='same',
             use_bias=True,
-            kernel_initializer='he_normal',
+            kernel_initializer=kernel_initializer,
             activation=activation)
 
     def call(self, inputs):
@@ -54,6 +55,8 @@ class TransposeConv2D(tf.keras.layers.Layer):
             activation=None,
             **kwargs):
         super(TransposeConv2D, self).__init__(**kwargs)
+        kernel_initializer = "he_normal" if activation in ('relu', 'relu6') else "glorot_uniform"
+
         len_filter_freq = kernel_size[1]
         self.upsampling2= tf.keras.layers.UpSampling2D(
             size=(1,2),
@@ -66,7 +69,7 @@ class TransposeConv2D(tf.keras.layers.Layer):
             filters=filters,
             kernel_size=kernel_size,
             padding='valid',
-            kernel_initializer='he_normal',
+            kernel_initializer=kernel_initializer,
             activation=activation)
 
     def call(self, inputs):

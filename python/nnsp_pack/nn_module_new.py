@@ -48,52 +48,39 @@ class NeuralNetClass(tf.keras.Model):
         self.dropout_layers = []
         self.kernel_size = []
         self.kernel_size_time = 1
-        
+
         for da_former, da in zip(config[:-1], config[1:]):
             neuron_i = da_former['layer_neurons']
             neuron_o = da['layer_neurons']
             activation = da['activation']
             layer_type = da['layer_type']
-            kernel_initializer = self.weight_initializer(
-                                        neuron_i,
-                                        neuron_o,
-                                        layer_type,
-                                        activation)
+            kernel_initializer = "he_normal" if activation in ('relu', 'relu6') else "glorot_uniform"
+
             drop_rate = da['dropout']
             droprate_recurrent_layer = 0
 
-            if layer_type == 'conv1d':
+            if layer_type in ('conv1d', 'conv2d'):
                 kernel_size = da['kernel_size']
                 self.kernel_size += [kernel_size]
-                self.num_context = kernel_size[0]
+
+                self.num_context = kernel_size if layer_type=='conv1d' else kernel_size[0]
                 layer = layers.Conv2D(
                         neuron_o,
                         kernel_size,
                         padding     = 'valid',
-                        strides     = (1, 1), # downsampling 2 in timesteps dim
+                        strides     = (1, 1),
                         activation  = activation,
-                        kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer),
-                        input_shape = (None, neuron_i, 1)) # (time, dim_feat, ch)
-
-            elif layer_type == 'conv2d':
-                kernel_size = da['kernel_size']
-                self.kernel_size += [kernel_size]
-                layer = layers.Conv2D(
-                        neuron_o,
-                        kernel_size=kernel_size,
-                        padding     = 'valid',
-                        strides     = (1, 1), # downsampling 2 in timesteps dim
-                        activation  = activation,
-                        kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer),
+                        kernel_initializer  = kernel_initializer,
                         input_shape = (None, neuron_i, 1)) # (time, dim_feat, ch)
 
             elif layer_type == 'fc':
                 layer = layers.Dense(
                         neuron_o,
                         activation = activation,
-                        # kernel_initializer  = tf.keras.initializers.Constant(kernel_initializer)
+                        kernel_initializer = kernel_initializer
                         )
                 self.kernel_size += [None]
+
             elif layer_type == 'lstm':
                 layer = layers.LSTM(
                         neuron_o,
@@ -107,10 +94,12 @@ class NeuralNetClass(tf.keras.Model):
                         recurrent_activation='sigmoid',
                         unroll=unroll_rnn)
                 self.kernel_size += [None]
+
             elif layer_type == 'minGRU':
                 layer = minGRU(
                         neuron_o)
                 self.kernel_size += [None]
+
             elif layer_type == 'unet':
                 layer= unet(
                     batch_size=batchsize,
@@ -125,7 +114,7 @@ class NeuralNetClass(tf.keras.Model):
                 self.kernel_size_time = da['kernel_size_time']
 
             else:
-                self.kernel_size += [None]
+                raise ValueError('Layer type not recognized')
                 drop_rate = 0 # already dropout in the lstm layer
             self.nn_layers += [layer]
             noise_shape=(None,1, None)
@@ -143,7 +132,6 @@ class NeuralNetClass(tf.keras.Model):
     def call(
         self,
         data_in,
-        # states,
         mask=1.0,
         training = False,
         quantized = False):
@@ -155,7 +143,6 @@ class NeuralNetClass(tf.keras.Model):
         # add the last dim to include channel (batches, timesteps, dim_feat, numCh = 1)
         out = self.input_layer(data_in)
 
-        # states_out=[]
         for i, layer_info in enumerate(zip(self.nn_layers, self.config[1:])):
             subnet, config = layer_info
             layer_type=config['layer_type']
@@ -163,20 +150,14 @@ class NeuralNetClass(tf.keras.Model):
             drop_layer = self.dropout_layers[i]
             out = drop_layer(out, training = training)
 
-            if layer_type == 'conv1d':
-                num_context = self.kernel_size[i][0]
+            if layer_type in ('conv1d', 'conv2d'):
+                num_context_time = config['kernel_size'] if layer_type=='conv1d' else config['kernel_size'][0]
+                state_update= tf.identity(out[:,-(num_context_time-1):,:])
                 out = tf.concat([state, out], axis=-1)
-                # states_out += [out[:,-(num_context-1):,:]]
                 out = tf.expand_dims(out,3)
                 out = subnet(out, training = training) # (batches, timesteps, 1, neurons[1])
                 out = out[:, :, 0, :]
-
-            elif layer_type == 'conv2d':
-                out = tf.expand_dims(out,3)
-                out = subnet(out, training = training) # (batches, timesteps, dim_feat, num_filters)
-                shape = tf.shape(out)
-                out = tf.reshape(out, [shape[0], shape[1],-1])
-                # states_out += [state]
+                state.assign(state_update)
 
             elif layer_type == 'lstm':
                 h_state, c_state = state
@@ -186,19 +167,16 @@ class NeuralNetClass(tf.keras.Model):
                                 training = training)
                 h_state.assign(h_state_update)
                 c_state.assign(c_state_update)
-                # states_out += [(h_state, c_state)]
 
             elif layer_type == 'minGRU':
                 out = subnet(out, return_states=False)
-                # states_out += [state]
+
             elif layer_type == 'unet':
                 out = tf.expand_dims(out,-1)
                 out = subnet(out, training=training)
                 out = out[:,:,:,0]
-                # states_out += [states_unet]
             else:
                 out = subnet(out, training=training)
-                # states_out += [state]
 
         out *= mask
         self.update_limited_quantizated(quantized)
@@ -257,10 +235,14 @@ class NeuralNetClass(tf.keras.Model):
                     c_states.assign(c_states * 0)
                 states += [(h_states, c_states)]
 
-            elif layer_type == 'conv1d':
+            elif layer_type in ('conv1d', 'conv2d'):
                 num_context = config_o['kernel_size'][0]
                 shape = (batchsize, num_context-1, neuron_in)
                 state = tf.fill(shape, tf.math.log(2**-15) / tf.math.log(10.0))
+                state = tf.Variable( # for eager mode assign
+                    state,
+                    dtype = tf.float32,
+                    trainable = False)
                 if norm_mean is not None:
                     state = (state - norm_mean) * norm_inv_std
 
@@ -270,7 +252,7 @@ class NeuralNetClass(tf.keras.Model):
                 states += [ self.nn_layers[i].states]
 
             else:
-                states += [tf.zeros((batchsize, 1,1), dtype = tf.float32)]
+                states += [None]
 
         return states
 
@@ -298,7 +280,7 @@ class NeuralNetClass(tf.keras.Model):
                 if zero_state:
                     h_states.assign(h * 0)
                     c_states.assign(c * 0)
-            elif layer_type == 'conv1d':
+            elif layer_type in ('conv1d', 'conv2d'):
                 shape = self.states[i].shape
                 state = tf.fill(shape, tf.math.log(2**-15) / tf.math.log(10.0))
                 if self.norm_mean is not None:
@@ -306,65 +288,12 @@ class NeuralNetClass(tf.keras.Model):
                 self.states[i].assign(state)
             elif layer_type == 'unet':
                 subnet.reset_states(zero_state=zero_state)
-    
+
     def quantized_weight(self):
         """
         Quantize the weight
         """
         self.build_nn(quantized=True)
-
-    def weight_initializer(self, neuron_in, neuron_out, layerType, act_type):
-        """
-        Manually initialize weight table
-        """
-        if layerType == 'fc':
-            shape = (neuron_in, neuron_out)
-            tmp = np.random.normal(scale = 1.0 / np.sqrt(neuron_in), size = shape)
-        elif layerType == 'conv1d':
-            shape = (self.kernel_size, neuron_in, 1, neuron_out)
-            tmp = np.random.normal(
-                scale=1.0 / np.sqrt(shape[0] * shape[1] * shape[2]),
-                size = shape)
-        else:
-            tmp = np.array([1])
-        if re.search('relu', act_type):
-            init_weight = tmp * np.sqrt(2)
-        else:
-            init_weight = tmp
-        return init_weight.astype(np.float32)
-
-    def duplicated_to(self, nn_duplx, logger):
-        """
-        Copy weight table from one net to the other.
-        """
-        nn_duplx.scalar_output = self.scalar_output
-        nn_duplx.layer_types = self.layer_types.copy()
-        nn_duplx.activaitons = self.activaitons.copy()
-        nn_duplx.neurons = self.neurons.copy()
-        names = [r'/bias', r'/kernel:0', r'/recurrent_kernel']
-        k = 0
-        eps = 10**-5
-
-        for i, layer_pair in enumerate(zip(self.nn_layers, nn_duplx.nn_layers)):
-            layer, layer_copy = layer_pair
-            for val in layer.trainable_variables:
-                for fd_name in names:
-                    fd_src = re.search(fd_name, val.name)
-                    if fd_src:
-                        for val_fd in layer_copy.trainable_variables:
-                            fd_dst = re.search(fd_name, val_fd.name)
-                            if fd_dst:
-                                den = tf.reduce_sum(tf.pow(val_fd - val,2.0))
-                                num = tf.reduce_sum(tf.pow(val_fd,2.0)) + eps
-                                self.weight_change[k].assign(tf.sqrt(den/num))
-                                val_fd.assign(val)
-                                k+=1
-
-        string = '\n\tweight changing rate = '
-        for i in range(k):
-            string += '%3.5f ' % self.weight_change[i]
-        string += '\n'
-        logger.info(string)
 
     def update_limited_quantizated(
             self,
