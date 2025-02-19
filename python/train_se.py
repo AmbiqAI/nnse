@@ -294,7 +294,10 @@ def test(
     stream=True
     nn_train.reset_states(zero_state=True)
     time_steps = 1 if stream else nfeats.shape[1]
-    nn_train = warp_tf_model(nn_train, time_steps=time_steps)
+
+    nn_train = warp_tf_model(
+        nn_train,
+        time_steps=time_steps)
     if stream: # frame by frame processing for streaming application
         tfmask = []
         for i in range(nfeats.shape[1]):
@@ -510,7 +513,7 @@ def main(args):
                 dataset_tr, fnames['train'],
                 batchsize, dim_feat, folder_nn,
                 feat_type=config['feat']['type'])
-
+    
     nn_train = NeuralNetClass(
         config=config_nn,
         batchsize   = batchsize,
@@ -518,7 +521,7 @@ def main(args):
         norm_mean=feat_stats['nMean_feat'],
         norm_inv_std=feat_stats['nInvStd'],
         )
-    # import pdb; pdb.set_trace()
+    
     if epoch_loaded == 'random':
         epoch_loaded = -1
 
@@ -552,7 +555,6 @@ def main(args):
 
         print(f"(train) best epoch picked by loss = {np.argmin(loss['train'][0: epoch_loaded+1])}")
         print(f"(test)  best epoch picked by loss = {np.argmin(loss['test'][0: epoch_loaded+1])}")
-
     
     shift_step = BLOCKS_PER_AUDIO * (len(fnames['train']) // batchsize)
 
@@ -779,7 +781,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default="random",
+        default="latest",
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \

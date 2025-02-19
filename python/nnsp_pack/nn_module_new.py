@@ -9,7 +9,7 @@ from .minRNN import minGRU
 from .unet import unet
 from . import post_aware_quant
 from .statsClass import statsClass
-
+from tensorflow_model_optimization.python.core.keras.compat import keras
 class NeuralNetClass(tf.keras.Model):
     """
     NeuralNetClass: a sequential model suppors only fc, lstm, 1D-conv layers

@@ -180,10 +180,12 @@ class encoder_unet(tf.keras.layers.Layer):
 
         for i, layer_info in enumerate(zip(self.states, self.convs)):
             state, net = layer_info
-            x = tf.concat([state, x], axis=1)
-            state_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
+            if self.kernel_size_time > 1:
+                x = tf.concat([state, x], axis=1)
+                state_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
             x = net(x)
-            self.states[i].assign(state_update)
+            if self.kernel_size_time > 1:
+                self.states[i].assign(state_update)
             outputs+= [x]
 
         # self.states = states_udpate
@@ -273,19 +275,19 @@ class decoder_unet(tf.keras.layers.Layer):
 
             encode, net, state = layer_info
             state_en, state_de = state
+            if self.kernel_size_time > 1:
+                encode = tf.concat([state_en, encode], axis=1) # time concatenation
+                x = tf.concat([state_de, x], axis=1) # time concatenation
 
-            encode = tf.concat([state_en, encode], axis=1) # time concatenation
-            x = tf.concat([state_de, x], axis=1) # time concatenation
-
-            state_en_update=tf.identity(encode[:,-(self.kernel_size_time-1):,:,:])
-            state_de_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
+                state_en_update=tf.identity(encode[:,-(self.kernel_size_time-1):,:,:])
+                state_de_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
 
             comb = tf.concat([encode, x], axis=-1) # skip connection (channel concatenation)
 
             x = net(comb)
-
-            self.states[i][0].assign(state_en_update)
-            self.states[i][1].assign(state_de_update)
+            if self.kernel_size_time > 1:
+                self.states[i][0].assign(state_en_update)
+                self.states[i][1].assign(state_de_update)
         return x
 
     def make_states(self):
