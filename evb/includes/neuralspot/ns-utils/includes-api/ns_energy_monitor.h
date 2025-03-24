@@ -2,7 +2,11 @@
 //
 //! @file ns_energ_monitor.c
 //!
-//! @brief Simple tool to expose application state to external monitor
+//! @brief Simple tool to expose application state to external monitor via GPIO
+//!
+//! @addtogroup ns-energy-monitor
+//! @{
+//! @ingroup ns-utils
 //
 //*****************************************************************************
 
@@ -44,31 +48,53 @@
 //
 //*****************************************************************************
 #ifndef NS_ENERGY_MON
-#define NS_ENERGY_MON
+    #define NS_ENERGY_MON
 
-#ifdef __cplusplus
+    #ifdef __cplusplus
 extern "C" {
+    #endif
+
+    #include "am_bsp.h"
+    #include "am_mcu_apollo.h"
+    #include "am_util.h"
+    #include "ns_core.h"
+    #include "ns_ambiqsuite_harness.h"
+
+#if defined(AM_PART_APOLLO3) || defined(AM_PART_APOLLO3P)
+    #define NS_POWER_MONITOR_GPIO_0 22
+    #define NS_POWER_MONITOR_GPIO_1 23
+#elif defined(AM_PART_APOLLO4) || defined(AM_PART_APOLLO4B) || defined(AM_PART_APOLLO4P)
+    #define NS_POWER_MONITOR_GPIO_0 22
+    #define NS_POWER_MONITOR_GPIO_1 23
+#elif defined(AM_PART_APOLLO4L)
+    #define NS_POWER_MONITOR_GPIO_0 61
+    #define NS_POWER_MONITOR_GPIO_1 23
+#elif defined(AM_PART_APOLLO5A) || defined(AM_PART_APOLLO5B)
+    #define NS_POWER_MONITOR_GPIO_0 29
+    #define NS_POWER_MONITOR_GPIO_1 36
 #endif
 
-#include "am_bsp.h"
-#include "am_mcu_apollo.h"
-#include "am_util.h"
 
-#define NS_POWER_MONITOR_GPIO_0 22
-#define NS_POWER_MONITOR_GPIO_1 23
+    #define NS_IDLE 0
+    #define NS_DATA_COLLECTION 1
+    #define NS_FEATURE_EXTRACTION 2
+    #define NS_INFERING 3
 
-#define NS_IDLE 0
-#define NS_DATA_COLLECTION 1
-#define NS_FEATURE_EXTRACTION 2
-#define NS_INFERING 3
+/**
+ * @brief Configure GPIO, then initialize to NS_IDLE
+ *
+ */
+extern void ns_init_power_monitor_state(void);
 
-extern void
-ns_init_power_monitor_state(void);
-extern void
-ns_set_power_monitor_state(uint8_t state);
+/**
+ * @brief Set GPIOs to indicate current state
+ *
+ * @param state
+ */
+extern void ns_set_power_monitor_state(uint8_t state);
 
-#ifdef __cplusplus
+    #ifdef __cplusplus
 }
-#endif
-
+    #endif
 #endif // NS_ENERGY_MON
+       /** @} */

@@ -1,0 +1,8 @@
+   text	   data	    bss	    dec	    hex	filename
+   1756	      0	     25	   1781	    6f5	build/apollo5b_evb/arm-none-eabi/src/ns-core/heap_4.o
+    320	      0	     16	    336	    150	build/apollo5b_evb/arm-none-eabi/src/ns-core/ns_core.o
+   1204	  20480	      4	  21688	   54b8	build/apollo5b_evb/arm-none-eabi/src/ns-core/apollo5b/gcc/startup_gcc.o
+   1364	     76	  40130	  41570	   a262	build/apollo5b_evb/arm-none-eabi/src/main.o
+   1043	 240268	 108708	 350019	  55743	build/apollo5b_evb/arm-none-eabi/src/tflm_unet/AudioPipe_wrapper_tflite.o
+   7654	      0	    824	   8478	   211e	build/apollo5b_evb/arm-none-eabi/src/tflm_unet/mut_model_init.o
+ 476060	 242668	 207992	 926720	  e2400	build/apollo5b_evb/arm-none-eabi/nnse.axf
