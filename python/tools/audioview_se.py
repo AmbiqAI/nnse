@@ -536,7 +536,7 @@ if __name__ == "__main__":
     argParser.add_argument(
         "-w",
         "--tty",
-        default = "/dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00", # "/dev/tty.usbmodem1234561"
+        default = "/dev/tty.usbmodem1234561" , #  "/dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00"
         help    = "Serial device (default value is None)",
     )
 
