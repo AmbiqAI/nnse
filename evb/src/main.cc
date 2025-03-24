@@ -29,6 +29,22 @@
 
 #include "AudioPipe_wrapper.h"
 #include "def_AudioSystem.h"
+static uint32_t elapsedTime = 0;
+ns_timer_config_t tickTimer = {
+    .api = &ns_timer_V1_0_0,
+    .timer = NS_TIMER_COUNTER,
+    .enableInterrupt = false,
+};
+ 
+void tic() {
+    uint32_t oldTime = elapsedTime;
+    elapsedTime = ns_us_ticker_read(&tickTimer);
+    if (elapsedTime == oldTime) {
+        // We've saturated the timer, reset it
+        ns_timer_clear(&tickTimer);
+    }
+}
+uint32_t toc() { return ns_us_ticker_read(&tickTimer) - elapsedTime; }
 
 volatile bool static g_audioReady = false;
 volatile bool static g_audioRecording = false;
@@ -207,6 +223,17 @@ int main(void) {
     ns_lp_printf("Output after execution\n");
     ns_lp_printf("|------End MCPS Measurement ------|\n\n");
     
+    ns_printf("\nElapsedtime measurement\n");
+    NS_TRY(ns_timer_init(&tickTimer), "Timer Init Failed\n");
+    tic();
+
+    for (int i=0; i < 100; i++)
+    {
+        // ns_printf("Processing frame %d\n", i);
+        AudioPipe_wrapper_frameProc(pcm_input, pcm_output);
+    }
+    elapsedTime = toc();
+    ns_printf("Elapsed time: %d us\n", elapsedTime);
     // There is a chicken-and-egg thing involved in getting the RPC
     // started. The PC-side server cant start until the USB TTY interface
     // shows up as a device, and that doesn't happen until we start servicing

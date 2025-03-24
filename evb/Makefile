@@ -18,9 +18,11 @@ sources += $(wildcard src/*.cc)
 sources += $(wildcard src/*.cpp)
 sources += $(wildcard src/*.s)
 
+TFLM_BUILD := 1# 1 : TFLM, 0 : NNSP
+MODEL_RNN := 0# 1 : RNN, 0 : UNET
 
 INCLUDES += ./src
-CFLAGS   += $(addprefix -I,$(INCLUDES))
+CFLAGS   += $(addprefix -I,./src)
 ifeq ($(strip $(TFLM_BUILD)),1)
 	ifeq ($(strip $(MODEL_RNN)),1) # RNN
 		sources += $(wildcard src/tflm_rnn/*.c)
@@ -43,8 +45,8 @@ else
 $(error "Invalid configuration: UNET is NOT supported when you use NNSP!")
 	endif
 endif
-
-
+# $(info "sources: $(sources)")
+$(info "CFLAGS: $(CFLAGS)")
 sources += $(wildcard src/ns-core/*.c)
 sources += $(wildcard src/ns-core/*.cc)
 sources += $(wildcard src/ns-core/*.cpp)
