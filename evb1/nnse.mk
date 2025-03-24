@@ -1,0 +1,2 @@
+TFLM_BUILD := 1# 1 : TFLM, 0 : NNSP
+NNSP_RNN := 0# 1 : RNN, 0 : UNET
