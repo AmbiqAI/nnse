@@ -8,7 +8,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from nnsp_pack import c_weight_man
-from nnsp_pack.nn_module import NeuralNetClass
+from nnsp_pack.nn_module_new import NeuralNetClass
 from nnsp_pack.load_nn_arch import load_nn_arch, setup_nn_folder
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from data_se import params_audio as PARAMS_AUDIO
@@ -44,8 +44,8 @@ def tf2np(net_tf, quantized = False):
         net_tf.quantized_weight()
 
     net_np = []
-    layer_types = net_tf.layer_types
-
+    layer_types = net_tf.get_config_info('layer_type')
+    neurons = net_tf.get_config_info('layer_neurons')
     for i, layer in enumerate(net_tf.nn_layers):
         size_conv1d = 1
         nbits_w = net_tf.bitwidths['kernel']
@@ -67,7 +67,7 @@ def tf2np(net_tf, quantized = False):
                 bias = val.numpy()
 
         if nn_type == 'lstm':
-            neuron = net_tf.neurons[i+1]
+            neuron = neurons[i+1]
 
             if len(bias) == neuron * 8: # for old tf version lstm
                 tmp1, tmp2 = np.split(bias, 2) # pylint: disable=unbalanced-tuple-unpacking
@@ -183,15 +183,16 @@ def converter(  net_tf,
                 nn_name = 'nn_model',
                 make_c_table = True,
                 folder_c = ".",
-                arm_M4 = True,
+                arm_core = 'M4',
                 num_dnsampl=1):
     """
     Convert tensor in NN to c code
     """
+
     mean, inv_std   = stats.values()
-    activations     = net_tf.activaitons
-    layer_types     = net_tf.layer_types
-    neurons         = net_tf.neurons
+    activations     = net_tf.get_config_info('activation')
+    layer_types     = net_tf.get_config_info('layer_type')
+    neurons         = net_tf.get_config_info('layer_neurons')
 
     net_tf.quantized_weight()
     net_np = tf2np(net_tf)
@@ -214,6 +215,7 @@ def converter(  net_tf,
         # fname_c = f'../evb/src/def_nn{nn_id}_{nn_name}.c'
         fname_c = f'{folder_c}/def_nn{nn_id}_{nn_name}.c'
         with open(fname_c, 'w') as file: # pylint: disable=unspecified-encoding
+            file.write(f"// arm_core = cortex-{arm_core}\n")
             file.write('#include <stdint.h>\n')
             file.write('#include "neural_nets.h"\n')
             file.write('#include "activation.h"\n')
@@ -231,7 +233,7 @@ def converter(  net_tf,
             file.write(f"\t.pt_stft_win_coeff = stft_win_coeff_w{PARAMS_AUDIO['win_size']}_h{PARAMS_AUDIO['hop']},\n") # pylint: disable=line-too-long
             file.write("\t.start_bin = 0,\n")
             file.write("\t.is_dcrm = 1,\n")
-            file.write("\t.pre_gain_q8 = 3840, // q8\n")
+            file.write("\t.pre_gain_q1 = 1 << 1, // q1\n")
             file.write('};\n')
 
             #-----------------stats---------------------------------
@@ -252,14 +254,16 @@ def converter(  net_tf,
             #-----------------weight table---------------------------------
             for i, layer_type in enumerate(layer_types):
                 file.write(f'// layer {i}\n')
-
+                
                 if layer_type in ('fc', 'conv1d'):
                     kernel = net_np[i]['kernel'].T
                     qbit = net_np[i]['qbits_w']
-                    kernel = c_weight_man.c_matrix_man(kernel, arm_M4)
-
+                    
+                    kernel = c_weight_man.c_matrix_man(kernel, arm_core)
+                    
                     kernel = float2fix(kernel, qbit, 8)
-                    file.write(f'const uint8_t {nn_name}_kernel{i}[]={{')
+                    
+                    file.write(f'uint8_t {nn_name}_kernel{i}[]={{')
                     for k in kernel:
                         file.write(f'0x{fix2hex(k, nbit=8):02x},' )
                     file.write('};\n')
@@ -269,7 +273,7 @@ def converter(  net_tf,
                     qbit = net_np[i]['qbits_b']
 
                     bias = float2fix(bias, qbit, 16)
-                    file.write(f'const uint16_t {nn_name}_bias{i}[]={{')
+                    file.write(f'uint16_t {nn_name}_bias{i}[]={{')
                     for item_bias in bias:
                         file.write(f'0x{fix2hex(item_bias, nbit=16):04x},')
                     file.write('};\n')
@@ -278,21 +282,21 @@ def converter(  net_tf,
                 elif layer_type=='lstm':
                     kernel = net_np[i]['kernel'].T
                     kernel_f, kernel_r = np.split(kernel, 2, axis=1) # pylint: disable=unbalanced-tuple-unpacking
-
+                    
                     bias = net_np[i]['bias'].T
                     kernel_f, kernel_r, bias = c_weight_man.c_lstm_weight_man(
-                                                kernel_f, kernel_r, bias, arm_M4)
+                                                kernel_f, kernel_r, bias, arm_core)
 
                     qbit = net_np[i]['qbits_w']
                     kernel_f = float2fix(kernel_f, qbit, 8)
-                    file.write(f'const uint8_t {nn_name}_kernel{i}[]={{')
+                    file.write(f'uint8_t {nn_name}_kernel{i}[]={{')
                     for k in kernel_f:
                         file.write(f'0x{fix2hex(k, nbit=8):02x},' )
                     file.write('};\n')
                     total_bytes += len(kernel_f)
 
                     kernel_r = float2fix(kernel_r, qbit, 8)
-                    file.write(f'const uint8_t {nn_name}_kernel_rec{i}[]={{')
+                    file.write(f'uint8_t {nn_name}_kernel_rec{i}[]={{')
                     for k in kernel_r:
                         file.write(f'0x{fix2hex(k, nbit=8):02x},')
                     file.write('};\n')
@@ -300,7 +304,7 @@ def converter(  net_tf,
 
                     qbit = net_np[i]['qbits_b']
                     bias = float2fix(bias, qbit, 16)
-                    file.write(f'const uint16_t {nn_name}_bias{i}[]={{')
+                    file.write(f'uint16_t {nn_name}_bias{i}[]={{')
                     for item_b in bias:
                         file.write(f'0x{fix2hex(item_b, nbit=16):04x},')
                     file.write('};\n')
@@ -440,37 +444,44 @@ def main(args):
     main function to convert tensorflow Neural net model to c table
     """
     epoch_loaded    = int(args.epoch_loaded)
-    nn_arch         = args.nn_arch
+    config_file     = args.config_file
     nn_name         = args.net_name
     nn_id           = int(args.net_id)
     folder_c        = args.folder_c
+    arm_core        = args.arm_core
 
-    out = load_nn_arch(f"{nn_arch}.txt")
-    neurons, _, layer_types, activations, num_context, num_dnsampl, scalar_output, len_filter, len_lookahead = out # pylint: disable=line-too-long
-    folder_nn = setup_nn_folder(nn_arch)
+    import yaml
+    from train_se import make_savedModel_folder
+    with open(config_file) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+        config_nn = config['nn_arch']
+        config_feat = config['feat']
+    folder_nn = make_savedModel_folder(config_file)
+
+    with open(os.path.join(f"{folder_nn}",'stats.pkl'), "rb") as file:
+        feat_stats = pickle.load(file)
     nn_infer = NeuralNetClass(
-        neurons     = neurons,
-        layer_types = layer_types,
-        activations = activations,
-        batchsize   = 1,
-        nDownSample = num_dnsampl,
-        kernel_size = num_context)
+        config=config_nn,
+        batchsize= 1,
+        time_steps= 1,
+        unroll_rnn=True,
+        norm_mean=feat_stats['nMean_feat'],
+        norm_inv_std=feat_stats['nInvStd'],
+        )
 
     nn_infer.load_weights(
             f'{folder_nn}/checkpoints/model_checkpoint_ep{epoch_loaded}' )
 
-    nn_infer.quantized_weight()
+    nn_infer.quantized_weight(batch_size=1)
 
-    with open(os.path.join(f"{folder_nn}",'stats.pkl'), "rb") as file:
-        stats = pickle.load(file)
     _, fname_inc, fname_c = converter(
             nn_infer,
-            stats,
+            feat_stats,
             nn_name = nn_name,
             nn_id   = nn_id,
             folder_c= folder_c,
-            arm_M4  = True,
-            num_dnsampl=num_dnsampl
+            arm_core  = arm_core,
+            num_dnsampl=1,
             )
 
     print(f'\nweight table is generated in \n{fname_inc}\n{fname_c}')
@@ -482,8 +493,8 @@ if __name__ == "__main__":
 
     argparser.add_argument(
         '-a',
-        '--nn_arch',
-        default='nn_arch/def_se_nn_arch72_mel',
+        '--config_file',
+        default='nn_arch/config_se_nn_arch72_mel.yaml',
         help='nn architecture')
 
     argparser.add_argument(
@@ -494,17 +505,22 @@ if __name__ == "__main__":
     argparser.add_argument(
         '--net_id',
         default= 3,
-        help='starting epoch')
+        help='nn id')
+
+    argparser.add_argument(
+        '--arm_core',
+        default= 'M55_exp',
+        help= 'M4 or M55 or M55_exp')
 
     argparser.add_argument(
         '--folder_c',
-        default= "../evb/src",
+        default= ".",
         type=str,
         help='C folder')
 
     argparser.add_argument(
         '--net_name',
-        default= 'se1',
+        default= 'se',
         help='starting epoch')
 
     main(argparser.parse_args())

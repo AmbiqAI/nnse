@@ -4,7 +4,7 @@ see https://bpb-us-w2.wpmucdn.com/u.osu.edu/dist/7/125945/files/2024/04/Tan-Wang
 """
 import tensorflow as tf
 from .TransposeConv2D import TransposeConv2D, SeparableTransposeConv2D
-
+from .dynamnic_tanh import dynamnic_tanh
 class SliceLayer(tf.keras.layers.Layer):
     """ Slice layer"""
     def __init__(
@@ -29,8 +29,15 @@ class SeparableConv2D(tf.keras.layers.Layer):
             strides=(1, 1),
             num_channels_in=1,
             activation=None,
+            normalization_layer=None,
             **kwargs):
         super(SeparableConv2D, self).__init__(**kwargs)
+
+        if normalization_layer is None:
+            use_bias=True
+        else:
+            use_bias=False
+
         self.depthwise = tf.keras.layers.Conv2D(
             filters=num_channels_in,
             kernel_size = kernel_size,
@@ -46,12 +53,14 @@ class SeparableConv2D(tf.keras.layers.Layer):
             padding='same',
             use_bias=True,
             kernel_initializer='he_normal',
-            activation=activation)
+            activation=activation,
+            )
 
     def call(self, inputs):
         """ Forward pass"""
         x = self.depthwise(inputs)
         x = self.pointwise(x)
+        
         return x
 
 class encoder_unet(tf.keras.layers.Layer):
@@ -60,6 +69,7 @@ class encoder_unet(tf.keras.layers.Layer):
             self,
             output_size=32,
             batch_size=1,
+            time_steps=1,
             kernel_size_time=3,
             num_chs=[1, 2, 4, 8, 16],
             separable=False,
@@ -67,6 +77,7 @@ class encoder_unet(tf.keras.layers.Layer):
             norm_mean=None,
             norm_inv_std=None,
             dim_feat=257,
+            normalization_layer=None,
             **kwargs):
         super(encoder_unet, self).__init__(**kwargs)
         self.norm_mean = norm_mean
@@ -94,6 +105,7 @@ class encoder_unet(tf.keras.layers.Layer):
                         strides=(1, 2),
                         activation=activation,
                         num_channels_in=num_ch_in,
+                        normalization_layer=normalization_layer,
                         name=f"conv_{i}"
                         ))
             else:
@@ -198,8 +210,10 @@ class decoder_unet(tf.keras.layers.Layer):
             kernel_size_time=3,
             num_chs=[1, 2, 4, 8, 16],
             separable=False,
-            activation='tanh',
+            activation='relu',
             dim_feat=257,
+            time_steps=1,
+            normalization_layer=None,
             **kwargs):
         super(decoder_unet,self).__init__(**kwargs)
         self.num_chs = num_chs
@@ -216,16 +230,22 @@ class decoder_unet(tf.keras.layers.Layer):
         self.states=self.make_states()
         # input shape (batch, T, Freq, 1)
         # self.pad_freq_bins = [0,1, 0, 0]
+        self.zeros = []
+
         for i, num_ch, num_ch_in in zip(range(stages), self.num_chs[:-1], self.num_chs[1:]):
             num_pad = self.pad_freq_bins[i]
             layer=tf.keras.Sequential(name=f"decoder_{i}")
+            activation_layer = activation
             if separable:
                 layer.add(
                     SeparableTransposeConv2D(
                         filters=num_ch,
                         kernel_size=(kernel_size_time, 3),
-                        activation=activation,
-                        num_channels_in=num_ch_in,
+                        activation=activation_layer,
+                        num_channels_in=num_ch_in*2,  # x2 since channel is doubled after concatenation
+                        batch_size=batch_size,
+                        time_steps=time_steps,
+                        normalization_layer=normalization_layer,
                         name=f"conv_tran_{i}"
                         ))
             else:
@@ -252,13 +272,18 @@ class decoder_unet(tf.keras.layers.Layer):
                         SliceLayer(
                             kernel_size_time,
                             name=f"slice_{i}"))
-
-            layer.add(
-                tf.keras.layers.ZeroPadding2D(
-                    padding=((0, 0),(0,num_pad)),
-                    name=f"padding_{i}")
-            )
-
+            if num_pad > 0:
+                zeros=tf.zeros((self.batch_size, time_steps, num_pad, num_ch), dtype=tf.float32)
+                zeros = tf.Variable(zeros, trainable=False)
+            else:
+                zeros = None
+  
+            # layer.add(
+            #     tf.keras.layers.ZeroPadding2D(
+            #         padding=((0, 0),(0,num_pad)),
+            #         name=f"padding_{i}")
+            # )
+            self.zeros = [zeros] + self.zeros # reverse the order
             self.convs = [layer] + self.convs # reverse the order
 
     def call(
@@ -269,23 +294,24 @@ class decoder_unet(tf.keras.layers.Layer):
             training=False):
         """ Forward pass"""
 
-        for i, layer_info in enumerate(zip(inputs_dec[::-1], self.convs, self.states)):
+        for i, layer_info in enumerate(zip(inputs_dec[::-1], self.convs, self.states, self.zeros)):
 
-            encode, net, state = layer_info
+            encode, net, state, zeros = layer_info
             state_en, state_de = state
+            if self.kernel_size_time > 1:
+                encode = tf.concat([state_en, encode], axis=1) # time concatenation
+                x = tf.concat([state_de, x], axis=1) # time concatenation
 
-            encode = tf.concat([state_en, encode], axis=1) # time concatenation
-            x = tf.concat([state_de, x], axis=1) # time concatenation
-
-            state_en_update=tf.identity(encode[:,-(self.kernel_size_time-1):,:,:])
-            state_de_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
-
+                state_en_update=tf.identity(encode[:,-(self.kernel_size_time-1):,:,:])
+                state_de_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
+         
             comb = tf.concat([encode, x], axis=-1) # skip connection (channel concatenation)
-
             x = net(comb)
-
-            self.states[i][0].assign(state_en_update)
-            self.states[i][1].assign(state_de_update)
+            # compensate the downsampling
+            x = tf.concat([x, zeros], axis=2) if zeros is not None else x
+            if self.kernel_size_time > 1:
+                self.states[i][0].assign(state_en_update)
+                self.states[i][1].assign(state_de_update)
         return x
 
     def make_states(self):
@@ -316,6 +342,7 @@ class unet(tf.keras.layers.Layer):
             self,
             output_size=32,
             batch_size=8,
+            time_steps=1,
             kernel_size_time=3,
             # num_chs = [1, 8, 16, 32, 64],
             num_chs=[1, 2, 4, 8, 16],
@@ -325,6 +352,7 @@ class unet(tf.keras.layers.Layer):
             norm_mean=None,
             norm_inv_std=None,
             dim_feat=257,
+            normalization_layer=None,
             **kwargs):
         super(unet,self).__init__(**kwargs)
 
@@ -335,21 +363,25 @@ class unet(tf.keras.layers.Layer):
         self.encoder = encoder_unet(
             output_size=output_size,
             batch_size=batch_size,
+            time_steps=time_steps,
             kernel_size_time=kernel_size_time,
             num_chs=self.num_chs,
             separable=separable,
             activation=activation,
             norm_mean=norm_mean,
             norm_inv_std=norm_inv_std,
-            dim_feat=dim_feat)
+            dim_feat=dim_feat,
+            normalization_layer=normalization_layer,)
         self.decoder = decoder_unet(
             output_size=output_size,
             batch_size=batch_size,
+            time_steps=time_steps,
             kernel_size_time=kernel_size_time,
             num_chs=self.num_chs,
             separable=separable,
             activation= activation,
-            dim_feat=dim_feat)
+            dim_feat=dim_feat,
+            normalization_layer=normalization_layer,)
         self.batch_size=batch_size
 
         self.freq_bins, self.pad_freq_bins = get_unet_info(
@@ -439,7 +471,7 @@ class unet(tf.keras.layers.Layer):
         input_dec = tf.reshape(
             out,
             (self.batch_size, T, self.F, self.chs))
-
+        
         # decoder
         output = self.decoder(
             input_dec,

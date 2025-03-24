@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+from .dynamnic_tanh import dynamnic_tanh
 class SeparableTransposeConv2D(tf.keras.layers.Layer):
     """ Transpose convolutional layer"""
     def __init__(
@@ -8,10 +8,15 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
             kernel_size,
             num_channels_in=1,
             activation=None,
+            batch_size=1,
+            time_steps=1,
+            normalization_layer=None,
             **kwargs):
         super(SeparableTransposeConv2D, self).__init__(**kwargs)
+
         kernel_initializer = "he_normal" if activation in ('relu', 'relu6') else "glorot_uniform"
         len_filter_freq = kernel_size[1]
+        self.kernel_size_time = kernel_size[0]
         self.upsampling2= tf.keras.layers.UpSampling2D(
             size=(1,2),
             interpolation='nearest'
@@ -19,6 +24,11 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
         self.padding = tf.keras.layers.ZeroPadding2D(
             padding=((0, 0),(len_filter_freq-1,len_filter_freq-1))
         )
+        
+        # if normalization_layer is None:
+        #     use_bias=True
+        # else:
+        #     use_bias=False
         self.depthwise = tf.keras.layers.Conv2D(
             filters=num_channels_in,
             kernel_size=kernel_size,
@@ -30,10 +40,16 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
             filters=filters,
             kernel_size=(1, 1),
             strides=(1, 1),
-            padding='same',
+            padding='valid',
             use_bias=True,
             kernel_initializer=kernel_initializer,
             activation=activation)
+
+        self.zeros=tf.zeros(
+            (batch_size,
+             time_steps + self.kernel_size_time - 1,
+             len_filter_freq-1,
+             num_channels_in)) # x2 since channel is doubled after concatenation
 
     def call(self, inputs):
         """ Forward pass """
@@ -41,9 +57,14 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
         # inputs_up = updsampling_by_2(inputs)
         inputs_up = self.upsampling2(inputs)
         inputs_up = inputs_up[:,:,:-1,:]
-        inputs_up = self.padding(inputs_up)
+        inputs_up = tf.concat(
+            [self.zeros, inputs_up, self.zeros], axis=-2)
+
+        # inputs_up = self.padding(inputs_up)
         outputs = self.depthwise(inputs_up)
+
         outputs = self.pointwise(outputs)
+
         return outputs
 
 class TransposeConv2D(tf.keras.layers.Layer):
@@ -52,7 +73,10 @@ class TransposeConv2D(tf.keras.layers.Layer):
             self,
             filters,
             kernel_size,
+            num_channels_in=1,
             activation=None,
+            time_steps=2,
+            num_bathces=1,
             **kwargs):
         super(TransposeConv2D, self).__init__(**kwargs)
         kernel_initializer = "he_normal" if activation in ('relu', 'relu6') else "glorot_uniform"
@@ -71,14 +95,16 @@ class TransposeConv2D(tf.keras.layers.Layer):
             padding='valid',
             kernel_initializer=kernel_initializer,
             activation=activation)
-
+        self.zeros=tf.zeros((num_bathces,time_steps,len_filter_freq-1,num_channels_in))
     def call(self, inputs):
         """ Forward pass """
         # input shape = (B, T, F, C)
         # inputs_up = updsampling_by_2(inputs)
         inputs_up = self.upsampling2(inputs)
         inputs_up = inputs_up[:,:,:-1,:]
-        inputs_up = self.padding(inputs_up)
+        inputs_up = tf.concat(
+            [self.zeros, inputs_up, self.zeros], axis=-2)
+        # inputs_up = self.padding(inputs_up)
         outputs = self.deconv(inputs_up)
         return outputs
 

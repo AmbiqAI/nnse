@@ -88,14 +88,14 @@ class encoder_unet(tf.keras.layers.Layer):
 
             if separable:
                 layer.add(
-                    SeparableConv2D(
-                        filters=num_ch,
-                        kernel_size=(self.kernel_size_time, 3),
-                        strides=(1, 2),
-                        activation=activation,
-                        num_channels_in=num_ch_in,
-                        name=f"conv_{i}"
-                        ))
+                        SeparableConv2D(
+                            filters=num_ch,
+                            kernel_size=(self.kernel_size_time, 3),
+                            strides=(1, 2),
+                            activation=activation,
+                            num_channels_in=num_ch_in,
+                            name=f"conv_{i}"
+                            ))
             else:
                 layer.add(
                     tf.keras.layers.Conv2D(
@@ -183,6 +183,7 @@ class encoder_unet(tf.keras.layers.Layer):
             if self.kernel_size_time > 1:
                 x = tf.concat([state, x], axis=1)
                 state_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
+
             x = net(x)
             if self.kernel_size_time > 1:
                 self.states[i].assign(state_update)
@@ -200,7 +201,8 @@ class decoder_unet(tf.keras.layers.Layer):
             kernel_size_time=3,
             num_chs=[1, 2, 4, 8, 16],
             separable=False,
-            activation='tanh',
+            activation='relu',
+            time_steps=1,
             dim_feat=257,
             **kwargs):
         super(decoder_unet,self).__init__(**kwargs)
@@ -218,16 +220,25 @@ class decoder_unet(tf.keras.layers.Layer):
         self.states=self.make_states()
         # input shape (batch, T, Freq, 1)
         # self.pad_freq_bins = [0,1, 0, 0]
+        self.zeros = []
         for i, num_ch, num_ch_in in zip(range(stages), self.num_chs[:-1], self.num_chs[1:]):
             num_pad = self.pad_freq_bins[i]
+            
+            if i == 0:
+                activation_layer = 'sigmoid' # last layer
+            else:
+                activation_layer = activation
             layer=tf.keras.Sequential(name=f"decoder_{i}")
+            
             if separable:
+
                 layer.add(
                     SeparableTransposeConv2D(
                         filters=num_ch,
                         kernel_size=(kernel_size_time, 3),
-                        activation=activation,
-                        num_channels_in=num_ch_in,
+                        activation=activation_layer,
+                        num_channels_in=num_ch_in * 2, # x2 since channel is doubled after concatenation
+                        time_steps=time_steps,
                         name=f"conv_tran_{i}"
                         ))
             else:
@@ -236,7 +247,7 @@ class decoder_unet(tf.keras.layers.Layer):
                         TransposeConv2D(
                             filters=num_ch,
                             kernel_size=(kernel_size_time, 3),
-                            activation=activation,
+                            activation=activation_layer,
                             name=f"conv_tran_{i}"
                             ))
                 else:
@@ -246,7 +257,7 @@ class decoder_unet(tf.keras.layers.Layer):
                             kernel_size=(kernel_size_time, 3),
                             strides=(1, 2),
                             padding='valid',
-                            activation=activation,
+                            activation=activation_layer,
                             kernel_initializer='he_normal',
                             name=f"conv_tran_{i}"
                             ))
@@ -254,13 +265,17 @@ class decoder_unet(tf.keras.layers.Layer):
                         SliceLayer(
                             kernel_size_time,
                             name=f"slice_{i}"))
-
-            layer.add(
-                tf.keras.layers.ZeroPadding2D(
-                    padding=((0, 0),(0,num_pad)),
-                    name=f"padding_{i}")
-            )
-
+            if num_pad > 0:
+                zeros=tf.zeros((self.batch_size, 1, num_pad, num_ch), dtype=tf.float32)
+                zeros = tf.Variable(zeros, trainable=False)
+            else:
+                zeros = None
+            # layer.add(
+            #     tf.keras.layers.ZeroPadding2D(
+            #         padding=((0, 0),(0,num_pad)),
+            #         name=f"padding_{i}")
+            # )
+            self.zeros = [zeros] + self.zeros # reverse the order
             self.convs = [layer] + self.convs # reverse the order
 
     def call(
@@ -271,9 +286,9 @@ class decoder_unet(tf.keras.layers.Layer):
             training=False):
         """ Forward pass"""
 
-        for i, layer_info in enumerate(zip(inputs_dec[::-1], self.convs, self.states)):
+        for i, layer_info in enumerate(zip(inputs_dec[::-1], self.convs, self.states, self.zeros)):
 
-            encode, net, state = layer_info
+            encode, net, state, zeros = layer_info
             state_en, state_de = state
             if self.kernel_size_time > 1:
                 encode = tf.concat([state_en, encode], axis=1) # time concatenation
@@ -285,6 +300,7 @@ class decoder_unet(tf.keras.layers.Layer):
             comb = tf.concat([encode, x], axis=-1) # skip connection (channel concatenation)
 
             x = net(comb)
+            x = tf.concat([x, zeros], axis=2) if zeros is not None else x
             if self.kernel_size_time > 1:
                 self.states[i][0].assign(state_en_update)
                 self.states[i][1].assign(state_de_update)
@@ -319,6 +335,7 @@ class unet(tf.keras.layers.Layer):
             output_size=32,
             batch_size=8,
             kernel_size_time=3,
+            time_steps=1,
             # num_chs = [1, 8, 16, 32, 64],
             num_chs=[1, 2, 4, 8, 16],
             separable=False,
@@ -343,7 +360,8 @@ class unet(tf.keras.layers.Layer):
             activation=activation,
             norm_mean=norm_mean,
             norm_inv_std=norm_inv_std,
-            dim_feat=dim_feat)
+            dim_feat=dim_feat,
+            )
         self.decoder = decoder_unet(
             output_size=output_size,
             batch_size=batch_size,
@@ -351,7 +369,9 @@ class unet(tf.keras.layers.Layer):
             num_chs=self.num_chs,
             separable=separable,
             activation= activation,
-            dim_feat=dim_feat)
+            dim_feat=dim_feat,
+            time_steps=time_steps,
+            )
         self.batch_size=batch_size
 
         self.freq_bins, self.pad_freq_bins = get_unet_info(
@@ -366,7 +386,9 @@ class unet(tf.keras.layers.Layer):
             stateful=False,
             unroll=unroll_rnn,
             return_sequences=True)
-
+        self.proj = tf.keras.layers.Dense(
+            257,
+            activation='sigmoid',)
     def reset_states(self, zero_state=False):
         """ Reset states"""
         h_states = tf.Variable(
@@ -446,6 +468,8 @@ class unet(tf.keras.layers.Layer):
         output = self.decoder(
             input_dec,
             outputs)
+        output = output[:,:,:,-1]
+        output = self.proj(output)
         return output
 
 def get_unet_info(

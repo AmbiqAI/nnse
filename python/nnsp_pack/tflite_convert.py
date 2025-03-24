@@ -33,6 +33,7 @@ def convert_model(
         converter.representative_dataset = dataset_gen
     elif dtype=="int16":
         # converter.target_spec.supported_types = [tf.int8]
+        converter._experimental_full_integer_quantization_bias_type = tf.int32
         converter.target_spec.supported_ops = [
             tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8,
             tf.lite.OpsSet.TFLITE_BUILTINS,
@@ -71,8 +72,8 @@ def tflite_convert(
             yield [
                 tf.random.uniform(
                     shape=shapes[0],
-                    minval=-6.0,
-                    maxval=6.0),
+                    minval=-32768 / 2**8,
+                    maxval= 32767 / 2**8),
             ]
     model.summary()
 
@@ -85,7 +86,7 @@ def tflite_convert(
     path_tflite=Path(path_tflite)
     Path(path_tflite).write_bytes(net_tflite)
 
-    os.system(f"xxd -i {path_tflite} > {os.path.dirname(path_tflite)}/model_data_{dtype}.cc")
+    os.system(f"xxd -i {path_tflite} > {os.path.dirname(path_tflite)}/model_data_{dtype}.c")
     return net_tflite
 
 def warp_tf_model(
@@ -119,30 +120,47 @@ def warp_tf_model(
 
 
 def test_conv2d_group():
-    from .unet1 import unet,encoder_unet
+    from .unet1 import unet,encoder_unet, SeparableConv2D
     class MyNet(tf.keras.Model):
         def __init__(self, num_ch):
             super().__init__()
 
-            self.conv = tf.keras.layers.Conv2D(
-                filters=num_ch,
+            self.conv = SeparableConv2D(
+                filters=16,
                 kernel_size=(2,3),
                 strides=(1,2),
-                padding='valid',
-                groups=num_ch,
-                activation='tanh',
-                use_bias=True,
+                num_channels_in=1,
+                activation='relu',
                 )
+            # self.conv = tf.keras.layers.Conv2D(
+            #     filters=16,
+            #     kernel_size=(2,3),
+            #     strides=(1,2),
+            #     padding='valid',
+            #     # groups=num_ch,
+            #     activation='relu',
+            #     use_bias=True,
+            # )
+            self.dense = tf.keras.layers.Dense(
+                units=960,
+                activation='relu',
+                kernel_initializer='he_normal',
+                bias_initializer='zeros',
+            )
         def build(self, input_shape):
             pass
 
         def call(self, inputs):
+            out = inputs
+            # out = self.conv(out)
+            # out = out[:,:,:,0]
+            
             out = self.conv(inputs)
 
             return out
 
     dim_feat=257
-    time_steps=10
+    time_steps=1
     num_ch=1
     dtype='int16'
 
@@ -152,15 +170,19 @@ def test_conv2d_group():
                 batch_size=1,
                 separable=True,
                 unroll_rnn=True,
-                num_chs= [1, 16, 16, 16, 16])
+                num_chs= [1, 12, 12, 12, 12]
+                # num_chs=[1, 2, 2, 2, 2],
+                )
     # nn_train = MyNet(num_ch)
     file=open('tflite/input_output.cc', 'w')
     file.write('#include <stdint.h>\n')
-
-    x = tf.random.uniform((1, time_steps, dim_feat,num_ch), dtype=tf.float32)
-    x = x * 100
+    if num_ch != 0:
+        x = tf.random.uniform((1, time_steps, dim_feat,num_ch), dtype=tf.float32)
+    else:
+        x = tf.random.uniform((1, time_steps, dim_feat), dtype=tf.float32)
+    # x = x * 100
     # x = tf.reshape(a, (1, time_steps, dim_feat,num_ch))
-    
+
     y = nn_train(x)
     print(y)
     nn = warp_tf_model(
@@ -189,11 +211,11 @@ def test_conv2d_group():
         if dtype == "int8":
             input_data = input_data.astype(np.int8)
             file.write('int8_t inputs[]={\n')
-               
+
         elif dtype == "int16":
             input_data = input_data.astype(np.int16)
             file.write('int16_t inputs[]={\n')
-            
+
         input_data_flat = input_data.flatten()
         for d in input_data_flat:
             file.write(f'{d}, ')
@@ -222,57 +244,24 @@ def test_conv2d_group():
     print(out.shape)
     file.close()
 
-def test_lstm():
+def test_pre_train():
 
-    class MyNet(tf.keras.Model):
-        def __init__(self, num_ch):
-            super().__init__()
 
-            self.lstm=tf.keras.layers.LSTM(
-                units=num_ch,
-                return_sequences=False,
-                return_state=False,
-                stateful=False,
-                activation='tanh',
-                recurrent_activation='sigmoid',
-                use_bias=True,
-                unroll=True,
-                )
-
-        def build(self, input_shape):
-            pass
-
-        def call(self, inputs):
-            out = self.lstm(inputs)
-
-            return out
-    import numpy as np
-    dim_feat=128
-    time_steps=8
+    dim_feat=257
+    time_steps=1
     num_ch=0
     dtype='int16'
 
     file=open('tflite/input_output.cc', 'w')
     file.write('#include <stdint.h>\n')
-    x = tf.random.uniform((1, time_steps, dim_feat), dtype=tf.float32)
+    if num_ch != 0:
+        x = tf.random.uniform((1, time_steps, dim_feat,num_ch), dtype=tf.float32)
+    else:
+        x = tf.random.uniform((1, time_steps, dim_feat), dtype=tf.float32)
     x = x * 100
-
-    nn_train = MyNet(dim_feat)
-    y = nn_train(x)
-    print(y)
-    nn = warp_tf_model(
-        nn_train,
-        time_steps=time_steps,
-        num_ch=num_ch,
-        dim_feat=dim_feat)
-    # nn.trainable_variables[0].assign(tf.ones_like(nn.trainable_variables[0]))
-
-    tflite_fp16_model = tflite_convert(
-        nn,
-        dtype=dtype,
-        path_tflite='./tflite/test.tflite')
+    
     interpreter = tf.lite.Interpreter(
-        model_content=tflite_fp16_model)
+        model_path=f'./tflite/nnse_{dtype}.tflite')
     interpreter.allocate_tensors()  # Needed before execution!
 
     # Get input and output tensors.
@@ -321,4 +310,4 @@ def test_lstm():
 
 if __name__ == "__main__":
     test_conv2d_group()
-    # test_lstm()
+    # test_pre_train()

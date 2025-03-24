@@ -297,7 +297,8 @@ def test(
 
     nn_train = warp_tf_model(
         nn_train,
-        time_steps=time_steps)
+        time_steps=time_steps,
+        dim_feat=dim_feat,)
     if stream: # frame by frame processing for streaming application
         tfmask = []
         for i in range(nfeats.shape[1]):
@@ -320,7 +321,9 @@ def test(
         dtype=dtype,
         path_tflite=f'./tflite/nnse_{dtype}.tflite')
     interpreter = tf.lite.Interpreter(
-        model_content=tflite_fp16_model)
+        model_content=tflite_fp16_model,
+        # model_path=f'./tflite/nnse_{dtype}.tflite'
+        )
     interpreter.allocate_tensors()  # Needed before execution!
 
     # Get input and output tensors.
@@ -487,8 +490,9 @@ def main(args):
             batchsize = batchsize,
             is_shuffle = False)
 
-    if args.mode == 'test':
-        batchsize = 1
+    # if args.mode == 'test':
+    #     batchsize = 1
+    #     timesteps = 1
 
     with open(args.config_file) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
@@ -513,10 +517,11 @@ def main(args):
                 dataset_tr, fnames['train'],
                 batchsize, dim_feat, folder_nn,
                 feat_type=config['feat']['type'])
-    
+
     nn_train = NeuralNetClass(
         config=config_nn,
-        batchsize   = batchsize,
+        batchsize= batchsize,
+        time_steps= timesteps,
         unroll_rnn=unroll_rnn,
         norm_mean=feat_stats['nMean_feat'],
         norm_inv_std=feat_stats['nInvStd'],
@@ -541,9 +546,11 @@ def main(args):
             epoch_loaded = int(re.sub(r'_ep','',tmp.group(0)))
             epoch1_loaded = epoch_loaded + 1
         else:
+
             epoch_loaded=int(epoch_loaded)
             nn_train.load_weights(
-                f'{folder_nn}/checkpoints/model_checkpoint_ep{int(epoch_loaded)}')
+                f'{folder_nn}/checkpoints/model_checkpoint_ep{int(epoch_loaded)}',
+                )
             epoch1_loaded = epoch_loaded + 1
 
         print(f"Model at epoch {epoch1_loaded - 1} is retrieved")
@@ -584,9 +591,23 @@ def main(args):
     print(f"Total number of parameters: {tot}")
 
     if args.mode == 'test':
+        nn_infer = NeuralNetClass(
+        config=config_nn,
+        batchsize= 1,
+        time_steps= 1,
+        unroll_rnn=unroll_rnn,
+        norm_mean=feat_stats['nMean_feat'],
+        norm_inv_std=feat_stats['nInvStd'],
+        )
+
+        # only copy the trainable variables
+        for u,v in zip(nn_train.trainable_variables, nn_infer.trainable_variables):
+            v.assign(u)
+
+
         test(
             args,
-            nn_train,
+            nn_infer,
             config,
             feat_stats)
         return
@@ -728,7 +749,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--config_file',
-        default='nn_arch/config_unet_relu_large_noncausal_sep.yaml',
+        default='nn_arch/config_unet_relu_noncausal_sep_new.yaml',
         help='nn architecture')
 
     argparser.add_argument(
@@ -781,7 +802,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default="latest",
+        default="random",
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \
