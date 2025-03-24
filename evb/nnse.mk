@@ -1,2 +1,2 @@
 TFLM_BUILD := 1# 1 : TFLM, 0 : NNSP
-NNSP_RNN := 1# 1 : RNN, 0 : UNET
+MODEL_RNN := 1# 1 : RNN, 0 : UNET

@@ -22,7 +22,7 @@ sources += $(wildcard src/*.s)
 INCLUDES += ./src
 CFLAGS   += $(addprefix -I,$(INCLUDES))
 ifeq ($(strip $(TFLM_BUILD)),1)
-	ifeq ($(strip $(NNSP_RNN)),1) # RNN
+	ifeq ($(strip $(MODEL_RNN)),1) # RNN
 		sources += $(wildcard src/tflm_rnn/*.c)
 		sources += $(wildcard src/tflm_rnn/*.cc)
 		sources += $(wildcard src/tflm_rnn/*.cpp)
@@ -34,7 +34,7 @@ ifeq ($(strip $(TFLM_BUILD)),1)
 		sources += $(wildcard src/tflm_unet/*.s)
 	endif
 else
-	ifeq ($(strip $(NNSP_RNN)),1) # RNN
+	ifeq ($(strip $(MODEL_RNN)),1) # RNN
 		sources += $(wildcard src/nnsp_rnn/*.c)
 		sources += $(wildcard src/nnsp_rnn/*.cc)
 		sources += $(wildcard src/nnsp_rnn/*.cpp)
