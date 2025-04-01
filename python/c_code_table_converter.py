@@ -25,7 +25,9 @@ def float2fix(data_in, nfrac, bitwidth):
     """
     max_val = 2**(bitwidth-1) - 1
     min_val = -2**(bitwidth-1)
+
     out = np.minimum(np.maximum(np.floor(data_in * 2**nfrac), min_val), max_val).astype(int)
+
     return out
 
 def fix2hex(data_in, nbit):

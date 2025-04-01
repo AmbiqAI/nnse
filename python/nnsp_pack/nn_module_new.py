@@ -112,6 +112,7 @@ class NeuralNetClass(tf.keras.Model):
                     norm_mean=norm_mean,
                     norm_inv_std=norm_inv_std,
                     time_steps=time_steps,
+                    dim_feat=self.dim_feat,
                     normalization_layer=da['normalization_layer'],
                     )
                 self.kernel_size_time = da['kernel_size_time']

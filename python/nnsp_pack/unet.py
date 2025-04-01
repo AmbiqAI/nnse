@@ -60,7 +60,7 @@ class SeparableConv2D(tf.keras.layers.Layer):
         """ Forward pass"""
         x = self.depthwise(inputs)
         x = self.pointwise(x)
-        
+
         return x
 
 class encoder_unet(tf.keras.layers.Layer):
@@ -87,6 +87,7 @@ class encoder_unet(tf.keras.layers.Layer):
         self.convs=[]
         self.num_chs = num_chs
         self.kernel_size_time = kernel_size_time
+
         self.freq_bins,_ = get_unet_info(
             num_chs,
             dim_feat=dim_feat)
@@ -140,7 +141,6 @@ class encoder_unet(tf.keras.layers.Layer):
             shape = (self.batch_size, len_pad, freq_bin, num_ch)
             if i==0:
                 state = tf.fill(shape, tf.math.log(2**-15) / tf.math.log(10.0))
-
                 if norm_mean is not None:
                     state = (state - norm_mean) * norm_inv_std
                 state = tf.Variable(state, trainable=False) # for eager mode

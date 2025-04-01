@@ -20,6 +20,7 @@ from nnsp_pack.converter_fix_point import fakefix_tf
 from nnsp_pack.calculate_feat_stats_se_split import feat_stats_estimator
 from nnsp_pack.load_nn_arch import load_nn_arch, setup_nn_folder
 from nnsp_pack.tf_basic_math import tf_log10_eps
+from nnsp_pack.mel_spec_gen import melspec_gen
 # import c_code_table_converter
 RESET_EVERY_AUDIO_CLIP = False
 SHOW_STEPS          = False
@@ -33,11 +34,6 @@ try:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 except: # pylint: disable=bare-except
     pass
-
-MEL_FBANKS = tf.Variable(
-    np.load('fbank_mel.npy').T,
-    dtype       = tf.float32,
-    trainable   = False)
 
 @tf.function
 def train_kernel(
@@ -94,6 +90,7 @@ def epoch_proc(
         feat_stats,
         config_feat,
         epoch = 0,
+        mat_feat = None,
         quantized       = False,
         train_summary_writer=None,):
     """
@@ -141,10 +138,7 @@ def epoch_proc(
             total_steps+=1
         pspec_sn, masks, pspec_s, _ = data
 
-        if feat_type == 'mel':
-            feats = tf.matmul(pspec_sn, MEL_FBANKS)
-        elif feat_type == 'pspec':
-            feats = tf.identity(pspec_sn)
+        feats = tf.matmul(pspec_sn, mat_feat)
         feats = tf_log10_eps(feats)
         feats = fakefix_tf(feats, 32, 15)
         nfeats = (feats - norm_mean) * norm_inv_std
@@ -240,13 +234,15 @@ def test(
         args,
         nn_train,
         config,
-        feat_stats):
+        feat_stats,
+        mat_feat = None):
     """ test function"""
     from nnsp_pack.feature_module import FeatureClass, display_stft_all
     from nnsp_pack.basic_dsp import dc_remove
     from nnsp_pack.tflite_convert import warp_tf_model, tflite_convert
     import soundfile as sf
     import librosa
+
     params_audio_def = {
         'win_size'      : 480,
         'hop'           : 160,
@@ -281,10 +277,8 @@ def test(
 
     pspec_sn_tmp = tf.constant(pspec_sn, dtype=tf.float32)
     pspec_sn_tmp = tf.expand_dims(pspec_sn_tmp, 0)
-    if feat_type == 'mel':
-        feats = tf.matmul(pspec_sn_tmp, MEL_FBANKS)
-    elif feat_type == 'pspec':
-        feats = tf.identity(pspec_sn_tmp)
+
+    feats = tf.matmul(pspec_sn_tmp, mat_feat)
     feats = tf_log10_eps(feats)
     feats = fakefix_tf(feats, 32, 15)
 
@@ -299,10 +293,12 @@ def test(
         nn_train,
         time_steps=time_steps,
         dim_feat=dim_feat,)
+
     if stream: # frame by frame processing for streaming application
         tfmask = []
         for i in range(nfeats.shape[1]):
             print(f"\rProcessing frame {i}/{nfeats.shape[1]}", end = '')
+
             est0 = nn_train(inputs=[nfeats[:,i:i+1,:]])
             tfmask += [est0]
         tfmask = tf.concat(tfmask, 1)
@@ -404,7 +400,7 @@ def test(
 
     plt.subplot(4,1,1)
     plt.imshow(
-        pspec_en.T,
+        feats.T,
         origin      = 'lower',
         cmap        = 'pink_r',
         aspect      = 'auto')
@@ -508,6 +504,18 @@ def main(args):
 
     dim_feat = config_nn[0]['layer_neurons']
     unroll_rnn=False if args.mode=='train' else True
+    if config['feat']['type'] == 'mel':
+        mat_feat=tf.Variable(
+            np.load('fbank_mel.npy').T,
+            dtype       = tf.float32,
+            trainable   = False)
+    elif config['feat']['type'] == 'spec_mel':
+        mat_feat=tf.Variable(
+            melspec_gen(16000,512, 32,50).T,
+            dtype       = tf.float32,
+            trainable   = False)
+    elif config['feat']['type'] == 'pspec':
+        mat_feat = tf.eye(257)
 
     if os.path.exists(f'{folder_nn}/stats.pkl'):
         with open(os.path.join(folder_nn, 'stats.pkl'), "rb") as file:
@@ -516,8 +524,17 @@ def main(args):
         feat_stats = feat_stats_estimator(
                 dataset_tr, fnames['train'],
                 batchsize, dim_feat, folder_nn,
-                feat_type=config['feat']['type'])
-
+                mat_feat=mat_feat,)
+    # mean0 = feat_stats['nMean_feat']*2**15
+    # std0 = feat_stats['nInvStd']*2**15
+    
+    # for i in range(len(mean0)):
+    #     print(f"{int(mean0[i])}, ", end="")
+    # print("\n")
+    # for i in range(len(std0)):
+    #     print(f"{int(std0[i])}, ", end="")
+    # print("\n")
+    # import pdb; pdb.set_trace()
     nn_train = NeuralNetClass(
         config=config_nn,
         batchsize= batchsize,
@@ -526,7 +543,7 @@ def main(args):
         norm_mean=feat_stats['nMean_feat'],
         norm_inv_std=feat_stats['nInvStd'],
         )
-    
+
     if epoch_loaded == 'random':
         epoch_loaded = -1
 
@@ -562,7 +579,7 @@ def main(args):
 
         print(f"(train) best epoch picked by loss = {np.argmin(loss['train'][0: epoch_loaded+1])}")
         print(f"(test)  best epoch picked by loss = {np.argmin(loss['test'][0: epoch_loaded+1])}")
-    
+
     shift_step = BLOCKS_PER_AUDIO * (len(fnames['train']) // batchsize)
 
     lr_schedule=CosineSchedule(
@@ -576,14 +593,6 @@ def main(args):
         learning_rate=lr_schedule,
         weight_decay=0.1
         )
-
-    # nn_np = c_code_table_converter.tf2np(nn_train, quantized=quantized)
-    # if DISPLAY_HISTOGRAM:
-    #     c_code_table_converter.draw_nn_hist(nn_np)
-    #     c_code_table_converter.draw_nn_weight(
-    #         nn_np,
-    #         nn_train,
-    #         pruning=False)
 
     tot=0
     for v in nn_train.trainable_variables:
@@ -609,7 +618,8 @@ def main(args):
             args,
             nn_infer,
             config,
-            feat_stats)
+            feat_stats,
+            mat_feat=mat_feat,)
         return
 
     for epoch in range(epoch1_loaded, num_epoch):
@@ -632,6 +642,7 @@ def main(args):
                 epoch           = epoch,
                 quantized       = quantized,
                 train_summary_writer=train_summary_writer,
+                mat_feat=mat_feat,
                 )
 
         # Computing Training loss
@@ -648,6 +659,7 @@ def main(args):
             config_feat     = config_feat,
             epoch           = epoch,
             quantized       = quantized,
+            mat_feat=mat_feat,
             )
 
         loss['train'][epoch] = nn_train.stats_inst.stats['acc_loss'] / nn_train.stats_inst.stats['acc_steps']
@@ -669,6 +681,7 @@ def main(args):
             config_feat         = config_feat,
             epoch               = epoch,
             quantized           = quantized,
+            mat_feat=mat_feat,
             )
 
         loss['test'][epoch] = nn_train.stats_inst.stats['acc_loss'] / nn_train.stats_inst.stats['acc_steps']
@@ -749,7 +762,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--config_file',
-        default='nn_arch/config_unet_relu_noncausal_sep_new.yaml',
+        default='nn_arch/config_unet_relu_noncausal_sep_specmel_th50_large.yaml',
         help='nn architecture')
 
     argparser.add_argument(
