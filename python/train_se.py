@@ -26,7 +26,6 @@ RESET_EVERY_AUDIO_CLIP = False
 SHOW_STEPS          = False
 DISPLAY_HISTOGRAM   = False
 BLOCKS_PER_AUDIO    = 5
-DIM_TARGET          = 257
 PI                  = 3.1415926
 physical_devices    = tf.config.list_physical_devices('GPU')
 
@@ -237,23 +236,16 @@ def test(
         feat_stats,
         mat_feat = None):
     """ test function"""
-    from nnsp_pack.feature_module import FeatureClass, display_stft_all
+    from nnsp_pack.feature_module import FeatureClass
     from nnsp_pack.basic_dsp import dc_remove
     from nnsp_pack.tflite_convert import warp_tf_model, tflite_convert
     import soundfile as sf
     import librosa
+    from data_se import params_audio as params_audio_def
 
-    params_audio_def = {
-        'win_size'      : 480,
-        'hop'           : 160,
-        'len_fft'       : 512,
-        'sample_rate'   : 16000,
-        'nfilters_mel'  : 72 }
     num_lookahead = config['feat']['num_lookahead']
     dim_feat = config['nn_arch'][0]['layer_neurons']
-    feat_type = config['feat']['type']
     wavfile = args.test_wavefile
-    # wavfile = 'test_wavs/steak_hairdryer.wav'
     fs_trgt = params_audio_def['sample_rate']
     audio, fs = sf.read(wavfile)
     if audio.ndim > 1:
@@ -468,8 +460,6 @@ def main(args):
             else:
                 len0 = int(len(lines) / batchsize) * batchsize
                 fnames[tr_set] = [line.strip() for line in lines[:len0]]
-
-                fnames[tr_set] = filter_in_data(fnames[tr_set])
                 # fnames[tr_set] = fnames[tr_set][1:100]
     _, dataset = tfrecords_pipeline(
             fnames['train'],
@@ -707,28 +697,6 @@ def main(args):
             tf.summary.scalar('loss/train', loss['train'][epoch], step=epoch)
             tf.summary.scalar('loss/test', loss['test'][epoch], step=epoch)
 
-def filter_in_data(fnames):
-    """_summary_
-
-    Args:
-        fnames (_type_): _description_
-
-    Returns:
-        _type_: _description_
-    """
-    ntypes = [
-            'ESC-50-MASTER',
-            'wham_noise',
-            'FSD50K',
-            'musan',
-        ]
-    fnames_out=[]
-    for fname in fnames:
-        for ntype in ntypes:
-            if re.search(fr"{ntype}", fname):
-                fnames_out+=[fname]
-                break
-    return fnames_out
 
 if __name__ == "__main__":
 
@@ -762,7 +730,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--config_file',
-        default='nn_arch/config_unet_relu_noncausal_sep_specmel_th50_large.yaml',
+        default='nn_arch/config_unet_relu_noncausal_sep_specmel_th50.yaml',
         help='nn architecture')
 
     argparser.add_argument(

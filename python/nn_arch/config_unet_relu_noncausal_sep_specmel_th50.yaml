@@ -6,7 +6,7 @@ nn_arch:
     activation: relu
     separable: True
     normalization_layer: ''
-    layer_neurons: 122
+    layer_neurons: 69
     kernel_size_time: 2
     num_chs: [1, 42, 42, 42, 42]
 

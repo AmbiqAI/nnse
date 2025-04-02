@@ -34,17 +34,17 @@ def reshape_mat_KxN(
             for K = 1, 2, 3, 4 only
     """
     rows, cols = mat.shape
-    if arm_core == 'M55': # M55: 8-MACs reshape
-        blks_c = cols >> 3
-        residue_c = cols % 8
+    # if arm_core == 'M55': # M55: 8-MACs reshape
+    #     blks_c = cols >> 3
+    #     residue_c = cols % 8
 
-        for i in range(blks_c):
-            submat=mat[:,i*8:i*8+8].flatten()
-            mat_reshape = np.concatenate((mat_reshape, submat))
-        if residue_c:
-            submat=mat[:,-residue_c:].flatten()
-            mat_reshape = np.concatenate((mat_reshape, submat))
-    elif arm_core == 'M55_exp':
+    #     for i in range(blks_c):
+    #         submat=mat[:,i*8:i*8+8].flatten()
+    #         mat_reshape = np.concatenate((mat_reshape, submat))
+    #     if residue_c:
+    #         submat=mat[:,-residue_c:].flatten()
+    #         mat_reshape = np.concatenate((mat_reshape, submat))
+    if arm_core == 'M55':
         submat = mat.flatten()
         mat_reshape = np.concatenate((mat_reshape, submat))
     else:

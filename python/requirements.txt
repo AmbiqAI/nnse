@@ -1,12 +1,11 @@
 tensorflow[and-cuda]== 2.15.1
+tensorboard
 numpy
 librosa
 matplotlib
 sounddevice
 soundfile
 argparse
-boto3
-wandb
 pyaudio
 pyqt5
 scipy

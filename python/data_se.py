@@ -11,14 +11,12 @@ import logging
 import random
 import numpy as np
 import wandb
-import boto3
 import soundfile as sf
 import sounddevice as sd
 import librosa
 from nnsp_pack import tfrecord_converter_se_split
 from nnsp_pack.feature_module import FeatureClass, display_stft_all
 from nnsp_pack import add_noise
-from nnsp_pack import boto3_op
 from nnsp_pack.se_download import se_download
 from nnsp_pack.basic_dsp import dc_remove
 
@@ -47,18 +45,6 @@ params_audio = {
     'len_fft'       : 512,
     'sample_rate'   : 16000,
     'nfilters_mel'  : 72 }
-
-def download_data():
-    """
-    download data
-    """
-    audio_lists = [
-        'data/test_files_se.csv',
-        'data/train_files_se.csv',
-        'data/noise_list.csv']
-    s3 = boto3.client('s3')
-    boto3_op.s3_download(S3_BUCKET, audio_lists)
-    return s3
 
 class FeatMultiProcsClass(multiprocessing.Process):
     """
@@ -290,8 +276,6 @@ def main(args):
     if download:
         se_download()
 
-    if DOWLOAD_DATA:
-        s3 = download_data()
     if args.wandb_track:
         run = wandb.init(
             project=args.wandb_project,
