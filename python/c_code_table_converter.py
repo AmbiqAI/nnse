@@ -187,7 +187,8 @@ def converter(  net_tf,
                 folder_c = ".",
                 arm_core = 'M4',
                 num_dnsampl=1,
-                is_tflite=True):
+                is_tflite=True,
+                tflite_filename='nnse_int16.tflite'):
     """
     Convert tensor in NN to c code
     """
@@ -198,6 +199,12 @@ def converter(  net_tf,
     neurons         = net_tf.get_config_info('layer_neurons')
 
     if is_tflite:
+        from nnsp_pack.tflite_convert import warp_tf_model, tflite_convert
+        nn = warp_tf_model(net_tf, dim_feat=neurons[0])
+        tflite_convert(
+            nn,
+            dtype='int16',
+            path_tflite=f'{folder_c}/{tflite_filename}')
         net_np=None
     else:
         net_tf.quantized_weight()
@@ -458,6 +465,7 @@ def main(args):
     folder_c        = args.folder_c
     arm_core        = args.arm_core
     is_tflite       = args.is_tflite
+    tflite_filename = args.tflite_filename
     import yaml
     from train_se import make_savedModel_folder
     with open(config_file) as f:
@@ -501,7 +509,8 @@ def main(args):
             folder_c= folder_c,
             arm_core  = arm_core,
             num_dnsampl=1,
-            is_tflite=is_tflite
+            is_tflite=is_tflite,
+            tflite_filename=tflite_filename
             )
 
     print(f'\nweight table is generated in \n{fname_inc}\n{fname_c}')
@@ -527,6 +536,12 @@ if __name__ == "__main__":
         type=bool,
         default= False,
         help='if true, using tflmodel, otherwise using nnsp model. ')
+
+    argparser.add_argument(
+        '--tflite_filename',
+        type=str,
+        default= 'nnse_int16.tflite',
+        help='tflite_filename to be saved ')
 
     argparser.add_argument(
         '--net_id',

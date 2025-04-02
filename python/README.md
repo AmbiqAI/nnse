@@ -7,19 +7,21 @@ Note that all python scripts described here are all under the folder `nnse/pytho
 - Python 3.7+
 - (optional but recommended) Create a python [virtualenv](https://docs.python.org/3/library/venv.html) and install python dependencies into it:
   - Linux
-    ```
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
+    ```sh
+    $ cd nnse/python
+    $ python -m venv .venv
+    $ source .venv/bin/activate
+    $ pip install -r requirements.txt
     # call other python tasks defined below with this active
     # then when finished with this virtualenv type:
     deactivate
     ```
   - Windows: in command window, type
     ```cmd
-    python -m venv .venv
-    .venv/Scripts/activate.bat
-    pip install -r requirements.txt
+    $ cd nnse/python
+    $ python -m venv .venv
+    $ .venv/Scripts/activate.bat
+    $ pip install -r requirements.txt
     # call other python tasks defined below with this active
     # then when finished with this virtualenv type:
     deactivate
@@ -27,73 +29,92 @@ Note that all python scripts described here are all under the folder `nnse/pytho
 ## Dataset
 Before working on training SE model, we need to download the required datasets. Please read on their license agreements carefully in [here](../docs/README.md).
 ## Quick start
-We provided one already trained model. The user can directly try on it. \
-`Small size model:` `~100k` parameters
-```cmd
-  $ python test_se.py --epoch_loaded=50 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
-```
-`Input argruments`:
-  * `--nn_arch`: it will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
-  * `--epoch_loaded`: it will load the model saved in epoch = 50.
-  * `--recording`:
-    * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
-    * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
-      ```py
-      $ python test_se.py --epoch_loaded=50 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=0  --feat_type='mel' --test_wavefile='test_wavs/speech.wav' 
-      ```
-  * `--feat_type`: type of feature extraction.
-    - `mel`: mel spectrogram
-    - `pspec`: power spectrogram
-
-`Outputs:`
-  * The enhanced speech is located at `test_result/enhanced_speech.wav`. 
+We provided two already trained models. The user can directly try on it.
+- Simple RNN: `Small size model:` `~100k` parameters
+  ```bash
+    $ python train_se.py \
+      --mode test \
+      --test_wavefile test_wavs/keyboard_steak.wav \
+      --epoch_loaded 50 \
+      --config_file nn_arch/config_se_nn_arch72_mel.yaml 
+  ```
+  `Input argruments`:
+    * `--mode test`: test on a already trained model
+    * `--test_wavefile test_wavs/keyboard_steak.wav`: `test_wavs/keyboard_steak.wav` will be tested (16kHz sampling rate)
+    * `--config_file nn_arch/config_se_nn_arch72_mel`: it will load the definition of NN architecture in [config_se_nn_arch72_mel.yaml](nn_arch/config_se_nn_arch72_mel.yaml). 
+    * `--epoch_loaded 50`: it will load the model saved in epoch = 50.
+  
+  `Outputs:`
+  * The enhanced speech is located at `test_results/config_se_nn_arch72_mel/keyboard_steak/enhanced_speech.wav`.
+- Unet: 
+ ```cmd
+    $ python train_se.py \
+      --mode test \
+      --test_wavefile test_wavs/keyboard_steak.wav \
+      --epoch_loaded 117 \
+      --config_file nn_arch/config_unet_relu_noncausal_sep_specmel_th50.yaml
+  ```
+ 
 
 ## Training procedure
 1. Feature extraction and save your features as tfrecord (see [here](https://www.tensorflow.org/guide/data) and [here](https://www.tensorflow.org/guide/data_performance)). Type
     ```cmd
-      $ python data_se.py --download=1 --dataset_noise=30000                     
+      $ python data_se.py --download 1 --dataset_noise 30000                     
     ```
     * `--download`:
-      * `--download=1`: it will automatically download all of the training data and then start to work on feature extraction.
-      * `--download=0`: it will assume dataset had been downloaded and start to work on feature extraction.
+      * `--download 1`: it will automatically download all of the training data and then start to work on feature extraction.
+      * `--download 0`: it will assume dataset had been downloaded and start to work on feature extraction.
     * `--datasize_noise`: the size of training dataset per noise, e.g.,
-      * `--datasize_noise=30000`: it randomly chooses 30000 speech samples on the training dataset (total size of training dataset is `93118`)
-      * `--datasize_noise=-1`: it uses the total size of training dataset 
-      (`99318` speech samples)
+      * `--datasize_noise 30000`: it randomly chooses 30000 speech samples on the training dataset (total size of training dataset is `93188`)
+      * `--datasize_noise -1`: it uses the total size of training dataset 
+      (`93188` speech samples)
             
 2. Train your model. Type
     ```cmd
-      $ python train_se.py --epoch_loaded='random' --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --feat_type='mel' 
+      $ python train_se.py --epoch_loaded random --config_file nn_arch/config_se_nn_arch72_mel.yaml
     ```
     * The argument `--epoch_loaded` represents which epoch of the weight table to be loaded
-      - `--epoch_loaded='random'`means you start to train NN from a   randomly initiialized set of weights
-      - `--epoch_loaded='latest'`means you start to train NN from the lateset set of weights of that epoch to be saved
-      - `--epoch_loaded=10` (or any non-negative integer) means we will attempt to load a model from the previously saved epoch=10 if it exists.
-    * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt` (see [here](nn_arch/def_s2i_nn_arch.txt)). Also, the trained model is saved in the folder `models_trained/def_se_nn_arch72_mel`. Note that the foldername `def_se_nn_arch72_mel` is the same as definition of nn architecture, `def_se_nn_arch72_mel.txt`, except of removing the prefix `def_` and suffix `.txt`.
-      - `NN architecture`: our nn architecture only supports sequential model (see the example [here](nn_arch/def_s2i_nn_arch.txt)). 
-        - The layer type supports `fc`, `lstm`, `conv1d`
-        - Activation type supports `relu6`, `tanh`, `sigmoid`, `linear`
-    * `--feat_type='mel'`: type of feature extraction.
-      - `mel`: mel spectrogram
-      - `pspec`: power spectrogram
-3.  Test from recorded wave file. Type
-    ```cmd
-      $ python test_se.py --epoch_loaded=50 --nn_arch='nn_arch/def_se_nn_arch72_mel.txt' --recording=1  --feat_type='mel' 
+      - `--epoch_loaded 'random'`means you start to train NN from a   randomly initiialized set of weights
+      - `--epoch_loaded 'latest'`means you start to train NN from the lateset set of weights of that epoch to be saved
+      - `--epoch_loaded 10` (or any non-negative integer) means we will attempt to load a model from the previously saved epoch=10 if it exists.
+    * The argument `--config_file nn_arch/config_se_nn_arch72_mel.yaml` will load the definition of NN architecture and type of feature extraction in `nn_arch/config_se_nn_arch72_mel.yaml` (see [here](nn_arch/config_se_nn_arch72_mel.yaml)). Also, the trained model is saved in the folder `models_trained/se_nn_arch72_mel`. Note that the foldername `se_nn_arch72_mel` is the same as definition of nn architecture, `config_se_nn_arch72_mel.yaml`, except of removing the prefix `config_` and suffix `.yaml`.
+3. Monitor your training using Tensorboard. Open a new shell and type
+    ```bash
+    $ tensorboard --logdir tensorboard
     ```
-    `Input Arguments:`
+    Open your web browser and enter the address (http://localhost:6006/)
 
-      * Here we provide an already trained model. Its nn architecture is defined in `nn_arch/def_se_nn_arch72_mel.txt`. You can change to your own model later.
-      * The argument `--nn_arch='nn_arch/def_se_nn_arch72_mel.txt'` will load the definition of NN architecture in `nn_arch/def_se_nn_arch72_mel.txt`. 
-      * The argument `--epoch_loaded=50` means it will load the model saved in epoch = 50.
-      * `--recording`:
-        * The argument `--recording=1` means it will, first, record your speech for 10 seconds and save it in `test_wavs/speech.wav`. Second, use `test_wavs/speech.wav` as input to run the inference and check its result.
-        * Alternatively, you can run the already saved wave file via setting `--recording=0`. This will directly use the already saved wave file `--test_wavefile='test_wavs/speech.wav'` without recording.
-      * `--feat_type='mel'`: type of feature extraction.
-        - `mel`: mel spectrogram
-        - `pspec`: power spectrogram
+# TFLM Conversion
+To convert to [TFLM](https://www.tensorflow.org/lite/microcontrollers) for Apollo 510 or Apollo 4, it can be accomplished using [neuralSPOT](https://github.com/AmbiqAI/neuralSPOT). 
+We suggest download neuralSPOT as this directory:
+```
+nnse/
+neuralSPOT/
+```
+using
+```sh
+$ cd ...
+$ git clone https://github.com/AmbiqAI/neuralSPOT.git
+```
+To generate the tflite model,
+```sh
+$ cd nnse/python
+$ tflite_filename=nnse_unet_int16
+$ python c_code_table_converter.py --is_tflite True \
+    --config_file nn_arch/config_unet_relu_noncausal_sep_specmel_th50.yaml \
+    --epoch_loaded 117 \
+    --tflite_filename ./$tflite_filename.tflite
+```
+This will generate `nnse_unet_int16.tflite`.
+Finally, to convert tflm
+```sh
+$ dst_dir=tflm_unet_int16 # this will create nnse/evb/src/$dst_dir
+$ ./tflm_autodeploy.sh $tflite_filename $dst_dir # execute the tflm conversion
+```
+TFLM code will be generated in `nnse/evb/src/$dst_dir`
 
-    `Outputs:`
-    * The enhanced speech is located at `test_results/enhanced_speech.wav`. 
+
+
 
 # Convert TF-model to C table
 To run the model on the embedded system, Apollo4 in our cae, we need a tool to support

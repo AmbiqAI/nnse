@@ -83,10 +83,9 @@ def tflite_convert(
         dtype=dtype)
     os.makedirs(os.path.dirname(path_tflite), exist_ok=True)
 
-    path_tflite=Path(path_tflite)
-    Path(path_tflite).write_bytes(net_tflite)
-
-    os.system(f"xxd -i {path_tflite} > {os.path.dirname(path_tflite)}/model_data_{dtype}.c")
+    path_tflite_b=Path(path_tflite)
+    path_tflite_b.write_bytes(net_tflite)
+    os.system(f"xxd -i {path_tflite_b} > {os.path.dirname(path_tflite)}/model_data_{dtype}.c")
     return net_tflite
 
 def warp_tf_model(
