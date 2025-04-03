@@ -1,11 +1,9 @@
 #!/bin/bash
-# tflite_filename=nnse_unet_int16 # Change this to the desired filename
-tflite_filename=$1
-dst_dir=$2
-mkdir ../evb/src/$dst_dir
-cp ./def_nn3_se.c ../evb/src/$dst_dir/def_nn3_se.c
-cp ./def_nn3_se.h ../evb/src/$dst_dir/def_nn3_se.h
 
+tflite_filename=$1
+dst_dir=tflm
+mkdir ../evb/src/$dst_dir
+cp def_nn3_se.{c,h} ../evb/src/$dst_dir/
 cp ./$tflite_filename.tflite \
     ../../neuralSPOT/tools/$tflite_filename.tflite
 cd ../../neuralSPOT

@@ -12,7 +12,7 @@
 #ifndef NS_BASELINE
 #define NS_BASELINE
 #ifdef __cplusplus
-    #include "arm_mve.h"
+
     // #include "tensorflow/lite/micro/all_ops_resolver.h"
     #include "tensorflow/lite/micro/kernels/micro_ops.h"
     #include "tensorflow/lite/micro/micro_interpreter.h"
@@ -85,7 +85,7 @@ typedef struct {
     uint32_t computed_arena_size;
 } ns_model_state_t;
 
-extern int tflm_validator_model_init(ns_model_state_t *ms);
+extern int ns_model_init(ns_model_state_t *ms);
 
 #ifdef __cplusplus
 }

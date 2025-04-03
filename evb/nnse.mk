@@ -1,2 +1,2 @@
-TFLM_BUILD := 1# 1 : TFLM, 0 : NNSP
-MODEL_RNN := 1# 1 : RNN, 0 : UNET
+override model_folder ?= tflm
+$(info compile tflm model located at src/$(model_folder))

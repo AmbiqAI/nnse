@@ -18,35 +18,13 @@ sources += $(wildcard src/*.cc)
 sources += $(wildcard src/*.cpp)
 sources += $(wildcard src/*.s)
 
-TFLM_BUILD := 1# 1 : TFLM, 0 : NNSP
-MODEL_RNN := 0# 1 : RNN, 0 : UNET
-
 INCLUDES += ./src
 CFLAGS   += $(addprefix -I,./src)
-ifeq ($(strip $(TFLM_BUILD)),1)
-	ifeq ($(strip $(MODEL_RNN)),1) # RNN
-		sources += $(wildcard src/tflm_rnn/*.c)
-		sources += $(wildcard src/tflm_rnn/*.cc)
-		sources += $(wildcard src/tflm_rnn/*.cpp)
-		sources += $(wildcard src/tflm_rnn/*.s)
-	else
-		sources += $(wildcard src/tflm_unet/*.c)
-		sources += $(wildcard src/tflm_unet/*.cc)
-		sources += $(wildcard src/tflm_unet/*.cpp)
-		sources += $(wildcard src/tflm_unet/*.s)
-	endif
-else
-	ifeq ($(strip $(MODEL_RNN)),1) # RNN
-		sources += $(wildcard src/nnsp_rnn/*.c)
-		sources += $(wildcard src/nnsp_rnn/*.cc)
-		sources += $(wildcard src/nnsp_rnn/*.cpp)
-		sources += $(wildcard src/nnsp_rnn/*.s)	
-	else
-$(error "Invalid configuration: UNET is NOT supported when you use NNSP!")
-	endif
-endif
-# $(info "sources: $(sources)")
-$(info "CFLAGS: $(CFLAGS)")
+sources += $(wildcard src/$(model_folder)/*.c)
+sources += $(wildcard src/$(model_folder)/*.cc)
+sources += $(wildcard src/$(model_folder)/*.cpp)
+sources += $(wildcard src/$(model_folder)/*.s)
+
 sources += $(wildcard src/ns-core/*.c)
 sources += $(wildcard src/ns-core/*.cc)
 sources += $(wildcard src/ns-core/*.cpp)

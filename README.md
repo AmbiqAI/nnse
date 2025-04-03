@@ -1,5 +1,11 @@
-# NN Speech Enhancement
-NN Speech Enhancement (NNSE) is a speech enhancement model (SE) based on recurrent neural networks (RNN).
+# Neural Network Speech Enhancement (NNSE)  
+
+Neural Network Speech Enhancement (NNSE) is a speech enhancement (SE) model based on recurrent neural networks (RNN).  
+
+**Update (04/02/2025):** 
+1. Added support for the U-Net architecture.
+2. Added TensorFlow Lite for Microcontrollers (TFLM) support.
+
 ## Directory contents
 ```py
 nnse/ # root 
@@ -12,14 +18,13 @@ nnse/ # root
         src/        # c source codes
         Makfile
         autogen.mk
-    ns-nnsp/  # c codes to build nnsp library (used only when re-building library)
     python/   # for NN training
     README.md # this readme
 ```
 ## Prerequisite
 ### `Software`
 To work on Apollo4, you need
-- Arm GNU Toolchain 11.3
+- Arm GNU Toolchain 14.2
 - Segger J-Link v7.56+
 # Speech Enhancement
 This speech enhancement model is based on 16 kHz sampling rate. The model size is about 100kB.
@@ -27,19 +32,86 @@ This speech enhancement model is based on 16 kHz sampling rate. The model size i
 ### `Dataset`
 The SE model is trained based on several audio dataset, including human speech and noises. Before you use this repo, please read on their license agreements carefully in [here](./docs/README.md).
 
-## Compiling and Running a Pre-Trained Model
-From the `nnse/evb/` directory:
 
-1. `make clean`
-2. `make`
-3. `make deploy` Prepare two USB cables. Ensure your board is connected via both the `JLINK USB port` and the `audio USB port`. Then turn on the power on EVB.
-4. Plug a mic into the 3.5mm port, and push BTN0 to initiate voice recording
-5. `make view` will provide SWO output as the device is running.
-6. On your cmd, type
-   ```cmd
-   $ python ../python/tools/audioview_se.py --tty=/dev/tty.usbmodem1234561 --playback=1
+
+## Compiling and Running a Pre-Trained Model  
+
+There are two approaches for deploying a TensorFlow model to Ambiq microcontrollers:  
+
+1. **TFLM (TensorFlow Lite for Microcontrollers)**  
+   - Supports most neural network layers.  
+   - Some 16x8-bit format layers, such as `separable conv` and `LSTM`, have limited support.  
+   - To address these limitations, the `ns-tflm` library, available in `neuralSPOT`, provides additional support.  
+
+2. **NS-NNSP (NeuralSPOT NNSP)**  
+   - A lightweight, in-house solution optimized for efficiency.  
+   - Supports only a limited set of layers: `conv1d`, `LSTM`, and `fully connected (FC)` layers.
+
+### Using TFLM
+To convert a model to TensorFlow Lite for Microcontrollers (TFLM) for Apollo 510 or Apollo 4, you can use neuralSPOT, an AI development toolkit provided by AmbiqAI.
+
+We recommend downloading neuralSPOT in the same directory as nnse, ensuring the following directory structure:
+```
+target-directory/
+  |------nnse/
+  |------neuralSPOT/
+```
+To clone the neuralSPOT repository, use the following commands:
+```sh
+cd <target-directory>
+git clone https://github.com/AmbiqAI/neuralSPOT.git
+```
+Install the required libs for neuralSPOT in this commands:
+```sh
+cd neuralSPOT
+python venv -m .venv
+source .venv/bin/activate
+pip install .
+```
+This setup ensures compatibility and ease of integration with nnse.
+
+To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow these steps:
+1. Navigate to the Python directory
+    ```sh
+    cd nnse/python
+    ```
+1. Define the TFLite filename
+    ```sh
+    tflite_filename=nnse_rnn_int16
+    ```
+1. Run the TFLite conversion script
+    ```sh
+    python c_code_table_converter.py --is_tflite True \
+      --config_file nn_arch/config_se_nn_arch72_mel.yaml \
+      --epoch_loaded 50 \
+      --tflite_filename ./$tflite_filename.tflite
+    ```
+    This script converts the trained model to the TFLite one.
+1. Convert the TFLite model to TensorFlow Lite for Microcontrollers (TFLM)
+    ```sh
+    ./tflm_autodeploy.sh $tflite_filename
+    ```
+    This script executes the conversion of the TFLite model to a format compatible with TFLM inside `nnse/evb/src/tflm`.
+1. **Deployment**
+    ```sh
+    cd ../evb # go to `nnse/evb`
+    make clean
+    make model_folder=tflm
+    make deploy
+    make view # will provide SWO output as the device is running.
+    ``` 
+    Prepare two USB cables. Ensure your board is connected via both the `JLINK USB port` and the `audio USB port`. Then turn on the power on EVB.
+1. Plug a mic into the 3.5mm port.
+
+1. On your cmd, type
+   ```sh
+   python ../python/tools/audioview_se.py --tty /dev/tty.usbmodem1234561 # MacOS
+   python ../python/tools/audioview_se.py --tty /dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00 # Ubuntu
+   python ../python/tools/audioview_se.py --tty COM4 # Windows
    ```
-   You should see a GUI popping out as below. Click the `record` button to start the record. Anc click `stop` button to finish. The top panel will show the raw audio that microphone records, and the bottom one will show the enhanced audio.
+   You should see a GUI popping out as below.
+1. Press button 1 on EVB.\
+    Click the `record` button to start the record. And click `stop` button to finish. The top panel will show the raw audio that microphone records, and the bottom one will show the enhanced audio.
     <p align="center">
       <img src="./pics/gui.png"  width="80%">
     </p>
@@ -47,63 +119,39 @@ From the `nnse/evb/` directory:
    - You might need to change the option `--tty` depending on your OS.
    - The option `playback=1` means you want to play the enhanced speech on the other computer via internet. One simple example is to use MS Teams (see [here](docs/demo.pdf)).
       - `Note`: we suggest to use earphone on the host side to avoid the echo effect. 
-8. Check the two recording files under `nnse/evb/audio_result/`. 
+1. Check the two recording files under `nnse/evb/audio_result/`. 
    - `audio_raw.wav`: the raw PCM data from your mic.
    - `audio_se.wav`: the enhanced speech.
 
+### Using NNSP
+To generate the necessary files for NNSP, follow these steps:
+1. Navigate to the Python directory and run the conversion script
+    ```sh
+    cd nnse/python
+    python c_code_table_converter.py --is_tflite False \
+    --config_file nn_arch/config_se_nn_arch72_mel.yaml \
+    --epoch_loaded 50
+
+    ```
+1. Copy the generated source files to the target directory
+    ```sh
+    cp def_nn3_se.{c,h} ../evb/src/nnsp/
+    ```
+1. Navigate to the `evb` directory
+    ```sh
+    cd ../evb # go to nnse/evb
+    ```
+1. Clean and build the project
+    ```sh
+    make clean
+    make model_folder=nnsp
+    ```
+The remaining steps are the same as in the TFLM case.
+
 ## Re-Training a New Model
 
-Our approach to training the model can be found in [README.md](./python/README.md). The trained model is saved in [evb/src/def_nn3_se.c](evb/src/def_nn3_se.c) and [evb/src/def_nn3_se.h](evb/src/def_nn3_se.h). 
+Our approach to training the model can be found in [README.md](./python/README.md).
 
-## Library NS-NNSP Library Overview
-Library neuralspot NNSP, `ns-nnsp.a`, is a C library to build a pipeline including feature extraction and neural network to run on Apollo4. The source code is under the folder `ns-nnsp/`. You can modify or rebuild it via [NeuralSPOT Ambiq's AI Enablement Library](https://github.com/AmbiqAI/neuralSPOT).
-In brief, there are two basic building blocks inside `ns-nnsp.a`, feature extraction and neural network. In `ns-nnsp.a`, we call them `FeatureClass` defined in `feature_module.h` and `NeuralNetClass` in `neural_nets.h`, respectively. Furthermore, `NNSPClass` in `nn_speech.h` encapsulates them to form a concrete instance.
-We illustrate this in Fig. 1. 
-<p align="center">
-  <img src="./pics/nnsp_flow.jpg"  width="80%">
-</p>
-<p align="center">
-  Fig. 1: Illustration of `ns-nnsp`
-</p>
+## NS-NNSP Library Overview  
 
-Also, in our specific s2i NN case, `def_nn0_s2i.c` has two purposes:
-  1. For feature extraction, we use Mel spectrogram with 40 Mel-scale. To apply the standarization to the features in training dataset, it requires statistical mean and standard deviation, which is defined in `def_nn0_s2i.c`. 
-  2. For the neural network, it points to the trained weight table defined in `def_nn0_s2i.c` as well.
-
-# Build NS-NNSP library from NeuralSPOT (Optional)
-If you want to modify or re-build the `ns-nnsp.a` library, you can follow the steps here. 
-1. Download NeuralSPOT
-```bash
-$ git clone https://github.com/AmbiqAI/neuralSPOT.git ../neuralSPOT
-```
-2. Copy the source code of NS-NNSP to NeuralSPOT. Then go to NeuralSPOT folder.
-```bash
-$ cp -a ns-nnsp ../neuralSPOT/neuralspot; cd ../neuralSPOT
-```
-3. Open `neuralSPOT/Makefile` and append the `ns-nnsp` to the library modules as below
-```bash
-# NeuralSPOT Library Modules
-modules      := neuralspot/ns-harness 
-modules      += neuralspot/ns-peripherals 
-modules      += neuralspot/ns-ipc
-modules      += neuralspot/ns-audio
-modules      += neuralspot/ns-usb
-modules      += neuralspot/ns-utils
-modules      += neuralspot/ns-rpc
-modules      += neuralspot/ns-i2c
-modules      += neuralspot/ns-nnsp # <---add this line
-
-# External Component Modules
-modules      += extern/AmbiqSuite/$(AS_VERSION)
-modules      += extern/tensorflow/$(TF_VERSION)
-modules      += extern/SEGGER_RTT/$(SR_VERSION)
-modules      += extern/erpc/$(ERPC_VERSION)
-```
-4. Compile
-```bash
-$ make clean; make; make nest
-```
-5. Copy the necessary folders back to `nnsp` folder
-```bash
-$ cd nest; cp -a pack includes libs ../nnsp/evb
-```
+The `ns-nnsp.a` library, currently part of NeuralSPOT, is a C library designed for building pipelines that include feature extraction and neural network processing on the Apollo4/Apollo5 platform. The source code is located in the directory [here](https://github.com/AmbiqAI/neuralSPOT/tree/main/neuralspot/ns-nnsp) and can be modified or rebuilt using [NeuralSPOT, Ambiq's AI Enablement Library](https://github.com/AmbiqAI/neuralSPOT).
