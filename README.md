@@ -27,7 +27,7 @@ To work on Apollo4, you need
 - Arm GNU Toolchain 14.2
 - Segger J-Link v7.56+
 # Speech Enhancement
-This speech enhancement model is based on 16 kHz sampling rate. The model size is about 100kB.
+The speech enhancement models are based on 16 kHz sampling rate. The model sizes are about 100kB (simple RNN) and 170kB (U-Net).
 
 ### `Dataset`
 The SE model is trained based on several audio dataset, including human speech and noises. Before you use this repo, please read on their license agreements carefully in [here](./docs/README.md).
@@ -50,12 +50,16 @@ There are two approaches for deploying a TensorFlow model to Ambiq microcontroll
 ### Using TFLM
 To convert a model to TensorFlow Lite for Microcontrollers (TFLM) for Apollo 510 or Apollo 4, you can use neuralSPOT, an AI development toolkit provided by AmbiqAI.
 
-We recommend downloading neuralSPOT in the same directory as nnse, ensuring the following directory structure:
-```
-target-directory/
-  |------nnse/
-  |------neuralSPOT/
-```
+We recommend downloading **neuralSPOT** in the same directory as **nnse**, maintaining the following directory structure:  
+
+```sh
+📂 target-directory/
+   ├── 📂 nnse/
+   ├── 📂 neuralSPOT/
+```  
+
+This setup ensures seamless integration and compatibility.
+
 To clone the neuralSPOT repository, use the following commands:
 ```sh
 cd <target-directory>
