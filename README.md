@@ -68,7 +68,7 @@ git clone https://github.com/AmbiqAI/neuralSPOT.git
 Install the required libs for neuralSPOT in this commands:
 ```sh
 cd neuralSPOT
-python venv -m .venv
+python -m venv .venv
 source .venv/bin/activate
 pip install .
 ```
