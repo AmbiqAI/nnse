@@ -243,7 +243,8 @@ def test(
     import librosa
     from data_se import params_audio as params_audio_def
     from nnsp_pack.test_torch_pesq import test_audio_quality
-    
+    from torchmetrics.functional.audio.dnsmos import deep_noise_suppression_mean_opinion_score
+    import torch
     num_lookahead = config['feat']['num_lookahead']
     dim_feat = config['nn_arch'][0]['layer_neurons']
     wavfile = args.test_wavefile
@@ -379,6 +380,7 @@ def test(
     os.makedirs(folder, exist_ok=True)
     noisy_wav =f'{folder}/noisy.wav'
     enhanced_wav = f'{folder}/enhance_{dtype}.wav'
+
     sf.write(
         noisy_wav,
         speech,
@@ -387,7 +389,9 @@ def test(
         enhanced_wav,
         audio_out,
         fs_trgt)
-
+    torch_tensor = torch.from_numpy(audio_out)
+    scores = deep_noise_suppression_mean_opinion_score(torch_tensor, 16000, False)
+    print(f"DNSMOS Score: {scores}")
     test_audio_quality(noisy_wav, enhanced_wav)
     print(f'Check your noisy speech in test_results/{name}/noisy.wav')
     print(f'Check your enhanced speeech in test_results/{name}/enhance_{dtype}.wav')
@@ -734,7 +738,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--config_file',
-        default='nn_arch/config_unet_relu_noncausal_sep_specmel_th50.yaml',
+        default='nn_arch/config_unet_relu_noncausal_sep_mel_large.yaml',
         help='nn architecture')
 
     argparser.add_argument(
