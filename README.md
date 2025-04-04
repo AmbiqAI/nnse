@@ -72,6 +72,9 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
 1. Navigate to the Python directory
     ```sh
     cd nnse/python
+    python -m venv .venv
+    source .venv/bin/activate
+    ./setup.sh
     ```
 1. Define the TFLite filename
     ```sh
@@ -103,9 +106,9 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
 
 1. On your cmd, type
    ```sh
-   python ../python/tools/audioview_se.py --tty /dev/tty.usbmodem1234561 # MacOS
-   python ../python/tools/audioview_se.py --tty /dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00 # Ubuntu
-   python ../python/tools/audioview_se.py --tty COM4 # Windows
+   python audioview_se.py --tty /dev/tty.usbmodem1234561 # MacOS
+   python audioview_se.py --tty /dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00 # Ubuntu
+   python audioview_se.py --tty COM4 # Windows
    ```
    You should see a GUI popping out as below.
 1. Press button 1 on EVB.\
