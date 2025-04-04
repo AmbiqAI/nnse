@@ -2,16 +2,30 @@
 
 tflite_filename=$1
 dst_dir=tflm
-mkdir ../evb/src/$dst_dir
 cp def_nn3_se.{c,h} ../evb/src/$dst_dir/
 cp ./$tflite_filename.tflite \
     ../../neuralSPOT/tools/$tflite_filename.tflite
 cd ../../neuralSPOT
+mkdir projects/autodeploy
 python -m venv .venv
+pip install --upgrade pip
 pip install .
+
+# fix for ubuntu
+mkdir -p extern/AmbiqSuite/R5.2.0/pack/svd
+cp extern/AmbiqSuite/R5.2.0/pack/SVD/apollo5b.svd \
+    extern/AmbiqSuite/R5.2.0/pack/svd/apollo5b.svd
+# endfix
 source .venv/bin/activate
 cd tools
 ns_autodeploy --tflite-filename ./$tflite_filename.tflite --tensorflow-version ns_tflm_2025_03_19
+
+src_h=../projects/autodeploy/$tflite_filename/tflm_validator/src/mut_model_metadata
+
+awk '/#define TFLM_VALIDATOR_ARENA_SIZE/ {
+    $3 = $3 + 20
+} { print }' ${src_h}.h > ${src_h}_tmp.h && mv ${src_h}_tmp.h ${src_h}.h
+
 
 for file in mut_model_data.h mut_model_init.cc mut_model_metadata.h tflm_ns_model.h; do
 cp ../projects/autodeploy/$tflite_filename/tflm_validator/src/$file \

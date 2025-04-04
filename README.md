@@ -65,13 +65,7 @@ To clone the neuralSPOT repository, use the following commands:
 cd <target-directory>
 git clone https://github.com/AmbiqAI/neuralSPOT.git
 ```
-Install the required libs for neuralSPOT in this commands:
-```sh
-cd neuralSPOT
-python -m venv .venv
-source .venv/bin/activate
-pip install .
-```
+
 This setup ensures compatibility and ease of integration with nnse.
 
 To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow these steps:
