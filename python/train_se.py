@@ -242,7 +242,8 @@ def test(
     import soundfile as sf
     import librosa
     from data_se import params_audio as params_audio_def
-
+    from nnsp_pack.test_torch_pesq import test_audio_quality
+    
     num_lookahead = config['feat']['num_lookahead']
     dim_feat = config['nn_arch'][0]['layer_neurons']
     wavfile = args.test_wavefile
@@ -376,16 +377,19 @@ def test(
 
     folder=f'test_results/{name_model}/{name}'
     os.makedirs(folder, exist_ok=True)
+    noisy_wav =f'{folder}/noisy.wav'
+    enhanced_wav = f'{folder}/enhance_{dtype}.wav'
     sf.write(
-        f'{folder}/noisy.wav',
+        noisy_wav,
         speech,
         fs_trgt)
     sf.write(
-        f'{folder}/enhance_{dtype}.wav',
+        enhanced_wav,
         audio_out,
         fs_trgt)
 
-    print(f'Check your noisy speech in test_results/{name}/noisy_{dtype}.wav')
+    test_audio_quality(noisy_wav, enhanced_wav)
+    print(f'Check your noisy speech in test_results/{name}/noisy.wav')
     print(f'Check your enhanced speeech in test_results/{name}/enhance_{dtype}.wav')
 
     plt.figure(1)
@@ -730,7 +734,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--config_file',
-        default='nn_arch/config_unet_relu_noncausal_sep_mel.yaml',
+        default='nn_arch/config_unet_relu_noncausal_sep_specmel_th50.yaml',
         help='nn architecture')
 
     argparser.add_argument(
