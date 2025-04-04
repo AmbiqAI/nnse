@@ -1,4 +1,4 @@
-# NN SE (NNSE) model
+# Neural Network Speech Enhancement (NNSE) model
 This document explains how we train speech enhancement (SE) by using recurrent neural network.
 # Loss functions
 It is worth to compare the performance based on the loss functions listed in Table 1 (see [here](https://www.microsoft.com/en-us/research/uploads/prod/2021/08/23.pdf)).
@@ -11,7 +11,7 @@ Note that all python scripts described here are all under the folder `nnse/pytho
     $ cd nnse/python
     $ python -m venv .venv
     $ source .venv/bin/activate
-    $ pip install -r requirements.txt
+    $ ./setup.sh
     # call other python tasks defined below with this active
     # then when finished with this virtualenv type:
     deactivate
