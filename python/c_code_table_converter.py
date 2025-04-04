@@ -187,7 +187,7 @@ def converter(  net_tf,
                 folder_c = ".",
                 arm_core = 'M4',
                 num_dnsampl=1,
-                is_tflite=True,
+                is_tflite=1,
                 tflite_filename='nnse_int16.tflite'):
     """
     Convert tensor in NN to c code
@@ -198,7 +198,7 @@ def converter(  net_tf,
     layer_types     = net_tf.get_config_info('layer_type')
     neurons         = net_tf.get_config_info('layer_neurons')
 
-    if is_tflite:
+    if is_tflite==1:
         from nnsp_pack.tflite_convert import warp_tf_model, tflite_convert
         nn = warp_tf_model(net_tf, dim_feat=neurons[0])
         tflite_convert(
@@ -220,7 +220,7 @@ def converter(  net_tf,
             file.write('#include "nn_speech.h"\n')
             file.write(f'extern const int32_t feature_mean_{nn_name}[];\n')
             file.write(f'extern const int32_t feature_stdR_{nn_name}[];\n')
-            if not is_tflite: # for nnsp
+            if is_tflite==0: # for nnsp
                 file.write(f'extern NeuralNetClass net_{nn_name};\n' )
             file.write(f'extern PARAMS_NNSP params_nn{nn_id}_{nn_name};\n' )
             file.write('#endif\n')
@@ -264,7 +264,7 @@ def converter(  net_tf,
                 file.write(f'0x{fix2hex(tmp, nbit=32):08x}, ')
             file.write('};\n')
 
-            if not is_tflite: # for nnsp
+            if is_tflite==0: # for nnsp
                 total_bytes = 0
                 #-----------------weight table---------------------------------
                 for i, layer_type in enumerate(layer_types):
@@ -533,8 +533,8 @@ if __name__ == "__main__":
     
     argparser.add_argument(
         '--is_tflite',
-        type=bool,
-        default= False,
+        type=int,
+        default= 1,
         help='if true, using tflmodel, otherwise using nnsp model. ')
 
     argparser.add_argument(

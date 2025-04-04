@@ -82,7 +82,7 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
     ```
 1. Run the TFLite conversion script
     ```sh
-    python c_code_table_converter.py --is_tflite True \
+    python c_code_table_converter.py --is_tflite 1 \
       --config_file nn_arch/config_se_nn_arch72_mel.yaml \
       --epoch_loaded 50 \
       --tflite_filename ./$tflite_filename.tflite
@@ -129,7 +129,7 @@ To generate the necessary files for NNSP, follow these steps:
 1. Navigate to the Python directory and run the conversion script
     ```sh
     cd nnse/python
-    python c_code_table_converter.py --is_tflite False \
+    python c_code_table_converter.py --is_tflite 0 \
     --config_file nn_arch/config_se_nn_arch72_mel.yaml \
     --epoch_loaded 50
 
