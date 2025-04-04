@@ -7,8 +7,8 @@ cp def_nn3_se.{c,h} ../evb/src/$dst_dir/
 cp ./$tflite_filename.tflite \
     ../../neuralSPOT/tools/$tflite_filename.tflite
 cd ../../neuralSPOT
-# python venv -m .venv
-# pip install .
+python -m venv .venv
+pip install .
 source .venv/bin/activate
 cd tools
 ns_autodeploy --tflite-filename ./$tflite_filename.tflite --tensorflow-version ns_tflm_2025_03_19
