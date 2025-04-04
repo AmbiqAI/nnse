@@ -46,14 +46,38 @@ We provided two already trained models. The user can directly try on it.
   
   `Outputs:`
   * The enhanced speech is located at `test_results/config_se_nn_arch72_mel/keyboard_steak/enhanced_speech.wav`.
+  * It also shows the speech quality
+  ```sh
+  ---Noisy---
+  STOI: tensor([0.6946], grad_fn=<SqueezeBackward1>)
+  PESQ: tensor([1.1136], grad_fn=<SqueezeBackward1>)
+  SI-SDR: tensor([4.3818], grad_fn=<SqueezeBackward1>)
+
+  ---Enhance---
+  STOI: tensor([0.7852], grad_fn=<SqueezeBackward1>)
+  PESQ: tensor([1.1945], grad_fn=<SqueezeBackward1>)
+  SI-SDR: tensor([8.3645], grad_fn=<SqueezeBackward1>)
+  ```
 - Unet: 
- ```cmd
+    ```cmd
     $ python train_se.py \
       --mode test \
       --test_wavefile test_wavs/keyboard_steak.wav \
       --epoch_loaded 117 \
       --config_file nn_arch/config_unet_relu_noncausal_sep_specmel_th50.yaml
-  ```
+    ```
+    * 
+    ```sh
+    ---Noisy---
+    STOI: tensor([0.6946], grad_fn=<SqueezeBackward1>)
+    PESQ: tensor([1.1136], grad_fn=<SqueezeBackward1>)
+    SI-SDR: tensor([4.3818], grad_fn=<SqueezeBackward1>)
+
+    ---Enhance---
+    STOI: tensor([0.8025], grad_fn=<SqueezeBackward1>)
+    PESQ: tensor([1.2402], grad_fn=<SqueezeBackward1>)
+    SI-SDR: tensor([9.3557], grad_fn=<SqueezeBackward1>)
+    ```
  
 
 ## Training procedure
