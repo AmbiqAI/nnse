@@ -63,6 +63,7 @@ class NeuralNetClass(tf.keras.Model):
 
             if layer_type in ('conv1d', 'conv2d'):
                 kernel_size = da['kernel_size'] if layer_type=='conv2d' else [da['kernel_size'], neuron_i]
+
                 self.kernel_size += [kernel_size]
                 self.num_context = kernel_size[0]
                 layer = layers.Conv2D(
@@ -188,8 +189,6 @@ class NeuralNetClass(tf.keras.Model):
                 out = subnet(out, training=training)
 
         out *= mask
-        # self.update_limited_quantizated(quantized)
-
         return out
 
     def get_config_info(self, info='layer_type'):
@@ -265,7 +264,7 @@ class NeuralNetClass(tf.keras.Model):
                     dtype = tf.float32,
                     trainable = False)
                 if norm_mean is not None:
-                    state.assign( (state - norm_mean) * norm_inv_std )
+                    state.assign( (state - norm_mean) * norm_inv_std)
 
                 states += [state]
 
@@ -318,6 +317,7 @@ class NeuralNetClass(tf.keras.Model):
         Quantize the weight
         """
         self.build_nn(quantized=True, batch_size=batch_size)
+        self.update_limited_quantizated(quantized=True)
 
     def update_limited_quantizated(
             self,

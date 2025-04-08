@@ -235,7 +235,10 @@ class decoder_unet(tf.keras.layers.Layer):
         for i, num_ch, num_ch_in in zip(range(stages), self.num_chs[:-1], self.num_chs[1:]):
             num_pad = self.pad_freq_bins[i]
             layer=tf.keras.Sequential(name=f"decoder_{i}")
-            activation_layer = activation
+            if i == 0:
+               activation_layer=activation
+            else:
+                activation_layer = activation
             if separable:
                 layer.add(
                     SeparableTransposeConv2D(

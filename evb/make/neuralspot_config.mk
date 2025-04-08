@@ -108,7 +108,7 @@ ifndef AS_VERSION
 AS_VERSION := R5.2.0
 endif
 ifndef TF_VERSION
-TF_VERSION := ns_tflm_2025_03_06
+TF_VERSION := ns_tflm_v1_0_0
 endif
 SR_VERSION := R7.70a
 ERPC_VERSION := R1.9.1
@@ -124,10 +124,10 @@ ifndef EXAMPLE
 EXAMPLE     := all
 endif
 ifndef TARGET
-TARGET      := nnse
+TARGET      := nnse_streaming2
 endif
 NESTCOMP    := extern/AmbiqSuite
-NESTEGG := nnse
+NESTEGG := nnse_streaming2
 NESTSOURCEDIR := examples/$(NESTEGG)/src
 TARGETS := apollo3p_evb apollo4p_evb apollo4p_blue_kbr_evb apollo4p_blue_kxr_evb apollo4l_evb apollo4l_blue_evb apollo5a_evb
 

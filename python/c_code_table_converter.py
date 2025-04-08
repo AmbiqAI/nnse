@@ -199,12 +199,88 @@ def converter(  net_tf,
     neurons         = net_tf.get_config_info('layer_neurons')
 
     if is_tflite==1:
+        import tensorflow as tf
         from nnsp_pack.tflite_convert import warp_tf_model, tflite_convert
+        net_tf.reset_states(zero_state=True)
+
         nn = warp_tf_model(net_tf, dim_feat=neurons[0])
-        tflite_convert(
+
+        dtype= 'int16'  # Default dtype for TFLite conversion
+
+        tflite_fp16_model = tflite_convert(
             nn,
-            dtype='int16',
+            dtype=dtype,
             path_tflite=f'{folder_c}/{tflite_filename}')
+        # import shutil
+        # shutil.copyfile(f'{folder_c}/model_data_int16.c', '../../neuralSPOT/examples/nnse_unet/src/model_data_int16.c')
+        # nfeat_np = np.load('mel_input.npy')
+
+        interpreter = tf.lite.Interpreter(
+            model_content=tflite_fp16_model,
+            # model_path=f'./tflite/nnse_{dtype}.tflite'
+            )
+        interpreter.allocate_tensors()  # Needed before execution!
+
+        # # Get input and output tensors.
+        # input_details = interpreter.get_input_details()[0]
+        # output_details = interpreter.get_output_details()[0]
+
+        # # Test the model on random input data.
+        # input_shape = input_details['shape']
+
+        # out = []
+        
+        # for i in range(nfeat_np.shape[1]):
+        #     print(f"\rProcessing frame {i}/{nfeat_np.shape[1]}", end = '')
+        #     input_data = nfeat_np[:,i:i+1,:]
+        #     interpreter.set_tensor(
+        #         input_details['index'],
+        #         input_data)
+
+        #     interpreter.invoke()
+
+        #     # The function `get_tensor()` returns a copy of the tensor data.
+        #     # Use `tensor()` in order to get a pointer to the tensor.
+        #     output_data = interpreter.get_tensor(output_details['index'])
+        #     out += [output_data]
+
+        # out = np.concatenate(out, axis=1)[0]
+        # nfeat = nfeat_np[0]
+
+        # with open("../../neuralSPOT/examples/nnse_verify/src/input_nn_mel.c", "w") as file:
+        #     file.write("#include <stdint.h>\n")
+        #     file.write("const int16_t input_nn_mel[] = {\n")
+        #     for vec in nfeat[:10]:
+        #         for v in vec:
+        #             file.write(f"{v},")
+        #         file.write("\n")
+        #     file.write("};\n")
+
+        # with open("../../neuralSPOT/examples/nnse_verify/src/output_nn_mel.c", "w") as file:
+        #     file.write("#include <stdint.h>\n")
+        #     file.write("const int16_t output_nn_mel[] = {\n")
+
+        #     for vec in out[:10]:
+        #         for v in vec:
+        #             file.write(f"{v},")
+        #         file.write("\n")
+        #     file.write("};\n")
+        # with open("../../neuralSPOT/examples/nnse_unet/src/input_ouptut.c", "w") as file:
+        #     file.write("#include <stdint.h>\n")
+        #     file.write("const int16_t inputs[] = {\n")
+        #     for vec in nfeat:
+        #         for v in vec:
+        #             file.write(f"{v},")
+        #         file.write("\n")
+        #     file.write("};\n")
+        #     file.write("const int16_t outputs[] = {\n")
+        #     for vec in out:
+        #         for v in vec:
+        #             file.write(f"{v},")
+        #         file.write("\n")       
+        #     file.write("};\n")
+
+        # import pdb; pdb.set_trace()  # This will pause execution and allow you to inspect variables
         net_np=None
     else:
         net_tf.quantized_weight()
@@ -273,11 +349,13 @@ def converter(  net_tf,
                     if layer_type in ('fc', 'conv1d'):
                         kernel = net_np[i]['kernel'].T
                         qbit = net_np[i]['qbits_w']
-                        
+                        # import pdb; pdb.set_trace()  # This will pause execution and allow you to inspect variables
                         kernel = c_weight_man.c_matrix_man(kernel, arm_core)
-                        
+                        # print(kernel) 
                         kernel = float2fix(kernel, qbit, 8)
-                        
+                        # print(kernel)
+                        # import pdb; pdb.set_trace()  # This will pause execution and allow you to inspect variables
+                       
                         file.write(f'uint8_t {nn_name}_kernel{i}[]={{')
                         for k in kernel:
                             file.write(f'0x{fix2hex(k, nbit=8):02x},' )

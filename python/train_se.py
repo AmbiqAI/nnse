@@ -110,17 +110,18 @@ def epoch_proc(
         #     norm_mean=norm_mean,
         #     norm_inv_std = norm_inv_std,
         #     zero_state=zero_state)
-        net.reset_states(zero_state=False)
-        if num_lookahead > 0: # non-causal
-            shape = (batchsize, num_lookahead, net.dim_trgt)
-            head_s = tf.zeros(shape, dtype = tf.float32)
-            head_sn = tf.zeros(shape, dtype = tf.float32)
+
+        shape = (batchsize, num_lookahead, net.dim_trgt)
+        head_s = tf.zeros(shape, dtype = tf.float32)
+        head_sn = tf.zeros(shape, dtype = tf.float32)
         return head_s, head_sn
 
     total_batches =  len(fnames) // batchsize
 
     # intialize the padding for the first batch
-    head_pspec_s, head_pspec_sn = reset_states()
+    net.reset_states(zero_state=False)
+    if num_lookahead > 0: # non-causal
+        head_pspec_s, head_pspec_sn = reset_states()
 
     total_steps=BLOCKS_PER_AUDIO * total_batches * epoch
     for batch, data in enumerate(dataset):
@@ -231,7 +232,7 @@ def epoch_proc(
 
 def test(
         args,
-        nn_train,
+        nn_train_raw,
         config,
         feat_stats,
         mat_feat = None):
@@ -280,11 +281,11 @@ def test(
     nfeats = fakefix_tf(nfeats, 16, 8)
 
     stream=True
-    nn_train.reset_states(zero_state=True)
+    nn_train_raw.reset_states(zero_state=True)
     time_steps = 1 if stream else nfeats.shape[1]
 
     nn_train = warp_tf_model(
-        nn_train,
+        nn_train_raw,
         time_steps=time_steps,
         dim_feat=dim_feat,)
 
@@ -306,6 +307,12 @@ def test(
 
     # tflite
     dtype=args.dtype_tflite
+    nn_train_raw.reset_states(zero_state=True)
+    nn_train = warp_tf_model(
+        nn_train_raw,
+        time_steps=time_steps,
+        dim_feat=dim_feat,)
+    
     tflite_fp16_model = tflite_convert(
         nn_train,
         dtype=dtype,
@@ -332,7 +339,8 @@ def test(
             nfeat_np = nfeat_np.astype(np.int8)
         elif dtype == "int16":
             nfeat_np = nfeat_np.astype(np.int16)
-
+    # np.save('mel_input.npy', nfeat_np)  # Save the input for debugging
+    # import pdb; pdb.set_trace()  # This will pause execution and allow you to inspect variables
     # run tflite inference on true data
     out = []
     for i in range(nfeat_np.shape[1]):
@@ -389,9 +397,17 @@ def test(
         enhanced_wav,
         audio_out,
         fs_trgt)
+
+    print(f"\nNoisy speech mos")
+    torch_tensor = torch.from_numpy(speech)
+    scores = deep_noise_suppression_mean_opinion_score(torch_tensor, 16000, False)
+    print(f"DNSMOS Score: {scores}[p808_mos, mos_sig, mos_bak, mos_ovr]")
+    
+    print("Enhanced speech mos.")
     torch_tensor = torch.from_numpy(audio_out)
     scores = deep_noise_suppression_mean_opinion_score(torch_tensor, 16000, False)
-    print(f"DNSMOS Score: {scores}")
+    
+    print(f"DNSMOS Score: {scores}[p808_mos, mos_sig, mos_bak, mos_ovr]")
     test_audio_quality(noisy_wav, enhanced_wav)
     print(f'Check your noisy speech in test_results/{name}/noisy.wav')
     print(f'Check your enhanced speeech in test_results/{name}/enhance_{dtype}.wav')

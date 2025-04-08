@@ -91,6 +91,29 @@ int AudioPipe_wrapper_init(void)
             example_status = NS_STATUS_INIT_FAILED; // hang
     }
 
+    // Get data about input and output tensors
+    int numInputs = tflm.numInputTensors;
+    int numOutputs = tflm.numOutputTensors;
+    
+    ns_lp_printf("Model has %d inputs and %d outputs\n", numInputs, numOutputs);
+    ns_lp_printf("Input tensor 0 has %d bytes\n", tflm.model_input[0]->bytes);
+    ns_lp_printf("Output tensor 0 has %d bytes\n", tflm.model_output[0]->bytes);
+    ns_lp_printf("input scale=%f\n", tflm.model_input[0]->params.scale);
+    ns_lp_printf("input zero_point=%d\n", tflm.model_input[0]->params.zero_point);
+    
+    ns_lp_printf("input dims=%d\n", tflm.model_input[0]->dims->size);
+    int input_dim = 1;
+    for (int i = 0; i < tflm.model_input[0]->dims->size; i++) {
+        input_dim *= tflm.model_input[0]->dims->data[i];
+        ns_lp_printf("input dim[%d]=%d\n", i, tflm.model_input[0]->dims->data[i]);
+    }
+    int output_dim=1;
+    for (int i = 0; i < tflm.model_output[0]->dims->size; i++) {
+        output_dim*= tflm.model_output[0]->dims->data[i];
+        ns_lp_printf("output dim[%d]=%d\n", i, tflm.model_output[0]->dims->data[i]);
+    }
+    
+
     ns_lp_printf("Model initialized\n");
     return 0;
 }
@@ -118,12 +141,12 @@ int AudioPipe_wrapper_frameProc(
 
     int16_t *ptfeat = FEAT_INST.normFeatContext + params_nn3_se.num_mfltrBank * (FEATURE_CONTEXT-1);
 
-    float input_scale = tflm.model_input[0]->params.scale;
+    float32_t input_scale = tflm.model_input[0]->params.scale;
     int input_zero_point = tflm.model_input[0]->params.zero_point;    
 
     for (int i =0; i < params_nn3_se.num_mfltrBank; i++)
     {
-        float val = ((float) ptfeat[i] ) * scalar_norm;
+        float32_t val = ((float32_t) ptfeat[i] ) * scalar_norm;
         int16_t input = (int16_t) ((float32_t) val / (float32_t) input_scale + (float32_t) input_zero_point);
         tflm.model_input[0]->data.i16[i] =  input;
     }
@@ -135,17 +158,18 @@ int AudioPipe_wrapper_frameProc(
             example_status = NS_STATUS_FAILURE; // invoke failed, so hang
         }
     }
-    float output_scale = tflm.model_output[0]->params.scale;
+    float32_t output_scale = tflm.model_output[0]->params.scale;
     int output_zero_point = tflm.model_output[0]->params.zero_point;
     
     for (int i = 0; i < NN_DIM_OUT; i++) {
         float32_t out; 
         out = (float32_t) (tflm.model_output[0]->data.i16[i] - output_zero_point);
         out = out * output_scale;
-        
+        int32_t out_32s = (int32_t)(out * 32768.0f); // scale to 16-bit range
         // ns_lp_printf("%f ", out);
-        tmp_16s[i] = (int16_t) (out * 32768);
+        tmp_16s[i] = (int16_t) MAX(MIN(out_32s, 32767), -32768); // clamp to 16-bit range
     }
+
     // ns_lp_printf("\n");
     // // get the tf mask
     se_post_proc(

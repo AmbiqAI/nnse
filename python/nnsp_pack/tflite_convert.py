@@ -33,7 +33,7 @@ def convert_model(
         converter.representative_dataset = dataset_gen
     elif dtype=="int16":
         # converter.target_spec.supported_types = [tf.int8]
-        converter._experimental_full_integer_quantization_bias_type = tf.int32
+        # converter._experimental_full_integer_quantization_bias_type = tf.int32
         converter.target_spec.supported_ops = [
             tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8,
             tf.lite.OpsSet.TFLITE_BUILTINS,

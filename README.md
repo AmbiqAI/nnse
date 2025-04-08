@@ -4,7 +4,7 @@ Neural Network Speech Enhancement (NNSE) is a speech enhancement (SE) model base
 
 **Update (04/02/2025):** 
 1. Added support for the U-Net architecture.
-2. Added TensorFlow Lite for Microcontrollers (TFLM) support.
+2. Added TensorFlow Lite for Microcontrollers (TFLM) support (16x8 bit).
 
 ## Directory contents
 ```py
@@ -76,7 +76,7 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
     source .venv/bin/activate
     ./setup.sh
     ```
-1. Define the TFLite filename
+1. Define the TFLite filename to be saved
     ```sh
     tflite_filename=nnse_rnn_int16
     ```
@@ -104,8 +104,11 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
     Prepare two USB cables. Ensure your board is connected via both the `JLINK USB port` and the `audio USB port`. Then turn on the power on EVB.
 1. Plug a mic into the 3.5mm port.
 
-1. On your cmd, type
+1. On your the other cmd, type
    ```sh
+   cd nnse/python # go to nnse/python folder
+   source .venv/bin/activate
+   cd tools # go to nnse/python/tools
    python audioview_se.py --tty /dev/tty.usbmodem1234561 # MacOS
    python audioview_se.py --tty /dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00 # Ubuntu
    python audioview_se.py --tty COM4 # Windows
@@ -120,7 +123,7 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
    - You might need to change the option `--tty` depending on your OS.
    - The option `playback=1` means you want to play the enhanced speech on the other computer via internet. One simple example is to use MS Teams (see [here](docs/demo.pdf)).
       - `Note`: we suggest to use earphone on the host side to avoid the echo effect. 
-1. Check the two recording files under `nnse/evb/audio_result/`. 
+1. Check the two recording files under `nnse/python/tools/audio_result/`. 
    - `audio_raw.wav`: the raw PCM data from your mic.
    - `audio_se.wav`: the enhanced speech.
 

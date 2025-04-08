@@ -29,8 +29,9 @@
 
 #include "AudioPipe_wrapper.h"
 #include "def_AudioSystem.h"
-#include "third_party/cmsis_nn/Include/arm_nnsupportfunctions.h"
+#include "third_party/ns_cmsis_nn/Include/arm_nnsupportfunctions.h"
 #define STREAMING 1
+#define PERF_TEST 0
 static uint32_t elapsedTime = 0;
 ns_timer_config_t tickTimer = {
     .api = &ns_timer_V1_0_0,
@@ -205,7 +206,9 @@ int main(void) {
     // Result of computation
     dataBlock resultBlock;
     NS_TRY(ns_rpc_genericDataOperations_init(&rpcConfig), "RPC Init Failed\n"); // init RPC and USB
-    
+
+
+#if PERF_TEST==1
     ns_lp_printf("\n|------ MCPS Measurement: run 100 times of inference ------|\n");
     
     // -- Init the NNSE2 model
@@ -240,7 +243,7 @@ int main(void) {
     }
     elapsedTime = toc();
     ns_printf("Elapsed time: %d us\n", elapsedTime);
-    
+#endif // PERF_TEST
 
     // There is a chicken-and-egg thing involved in getting the RPC
     // started. The PC-side server cant start until the USB TTY interface
@@ -270,7 +273,9 @@ int main(void) {
 #if STREAMING==1
     // -- Init the NNSE2 model
     ns_printf("Type $tools/python audioview_se.py\n");
+#if PERF_TEST==0
     AudioPipe_wrapper_init();
+#endif
     while (1) 
     {
         g_audioRecording = false;
@@ -320,24 +325,9 @@ int main(void) {
         
     } // while(1)
 #else
-    // -- Init the NNSE2 model
-    
-    // while (1) // check for record button press
-    // {
-    //     ns_rpc_data_computeOnPC(&computeBlock, &resultBlock);
-    //     int recording=resultBlock.buffer.data[0];
-    //     ns_rpc_data_clientDoneWithBlockFromPC(&resultBlock);
-    //     if (recording==1)
-    //     {
-    //         g_audioRecording = true;
-    //         break;
-    //     }
-    //     am_hal_delay_us(20000); 
-    // }
-    
     ns_printf("Type $tools/python -m wave_offline -o myaudio.wav -m server\n");
-    // AudioPipe_wrapper_init();
-    // AudioPipe_wrapper_reset();
+    AudioPipe_wrapper_init();
+    AudioPipe_wrapper_reset();
     int16_t *pt_wav = (int16_t*) data_wav;
     pcm_input = (int16_t*) audioDataBuffer;;
     int16_t tmp[200];

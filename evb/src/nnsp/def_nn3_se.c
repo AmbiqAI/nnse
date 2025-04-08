@@ -1,4 +1,4 @@
-// arm_core = cortex-M55_exp
+// arm_core = cortex-M55
 #include <stdint.h>
 #include "neural_nets.h"
 #include "activation.h"

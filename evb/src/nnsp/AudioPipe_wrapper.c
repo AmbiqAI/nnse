@@ -7,7 +7,7 @@
 #include "feature_module.h"
 #include "nnsp_identification.h"
 #include "ns_ambiqsuite_harness.h"
-#include "third_party/cmsis_nn/Include/arm_nnsupportfunctions.h"
+#include "third_party/ns_cmsis_nn/Include/arm_nnsupportfunctions.h"
 
 NNSPClass NNSP_INST; // 10ms
 FeatureClass FEAT_INST;
