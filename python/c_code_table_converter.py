@@ -188,7 +188,8 @@ def converter(  net_tf,
                 arm_core = 'M4',
                 num_dnsampl=1,
                 is_tflite=1,
-                tflite_filename='nnse_int16.tflite'):
+                tflite_filename='nnse_int16.tflite',
+                num_lookahead=0):
     """
     Convert tensor in NN to c code
     """
@@ -296,6 +297,7 @@ def converter(  net_tf,
             file.write('#include "nn_speech.h"\n')
             file.write(f'extern const int32_t feature_mean_{nn_name}[];\n')
             file.write(f'extern const int32_t feature_stdR_{nn_name}[];\n')
+            file.write(f"#define NUM_LOOKAHEAD {num_lookahead}\n")
             if is_tflite==0: # for nnsp
                 file.write(f'extern NeuralNetClass net_{nn_name};\n' )
             file.write(f'extern PARAMS_NNSP params_nn{nn_id}_{nn_name};\n' )
@@ -588,7 +590,8 @@ def main(args):
             arm_core  = arm_core,
             num_dnsampl=1,
             is_tflite=is_tflite,
-            tflite_filename=tflite_filename
+            tflite_filename=tflite_filename,
+            num_lookahead=config_feat['num_lookahead'],
             )
 
     print(f'\nweight table is generated in \n{fname_inc}\n{fname_c}')

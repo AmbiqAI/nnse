@@ -3,17 +3,17 @@
 #include "ns_ambiqsuite_harness.h"
 
 // Default Arena and RPC buffer sizes
-#define TFLM_VALIDATOR_ARENA_SIZE 13
+#define TFLM_VALIDATOR_ARENA_SIZE 94
 #define TFLM_VALIDATOR_RX_BUFSIZE 4096
 #define TFLM_VALIDATOR_TX_BUFSIZE 4096
-#define TFLM_VALIDATOR_MAX_RESOURCE_VARIABLES 3
+#define TFLM_VALIDATOR_MAX_RESOURCE_VARIABLES 14
 
 #define TFLM_MODEL_LOCATION NS_AD_TCM
 #define TFLM_ARENA_LOCATION NS_AD_TCM
 
-#define TFLM_VALIDATOR_MAC_ESTIMATE_COUNT 44
+#define TFLM_VALIDATOR_MAC_ESTIMATE_COUNT 164
 const uint32_t tflm_validator_mac_estimates[TFLM_VALIDATOR_MAC_ESTIMATE_COUNT] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 31104, 0, 0, 0, 0, 20736, 20736, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 72, 0, 72, 0, 72, 0};
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 204, 1428, 0, 0, 0, 0, 0, 0, 169344, 28224, 0, 0, 0, 0, 0, 0, 74088, 12348, 0, 0, 0, 0, 0, 0, 31752, 5292, 0, 0, 0, 0, 0, 0, 63504, 63504, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 296352, 24696, 0, 0, 0, 0, 0, 0, 0, 0, 635040, 52920, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1397088, 116424, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2921184, 5796, 0, 69, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 const int tflm_validator_number_of_estimates = TFLM_VALIDATOR_MAC_ESTIMATE_COUNT;
 
 #ifdef AM_PART_APOLLO5B

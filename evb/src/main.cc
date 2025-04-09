@@ -214,7 +214,7 @@ int main(void) {
     // -- Init the NNSE2 model
     AudioPipe_wrapper_init();
     AudioPipe_wrapper_reset();
-    int16_t *pcm_input = (int16_t*) data_wav;
+    int16_t *pcm_input = (int16_t*) audioDataBuffer;
     int16_t *pcm_output = audioDataBuffer + SAMPLES_IN_FRAME;
     
     static ns_perf_counters_t pp;
@@ -329,14 +329,18 @@ int main(void) {
     AudioPipe_wrapper_init();
     AudioPipe_wrapper_reset();
     int16_t *pt_wav = (int16_t*) data_wav;
-    pcm_input = (int16_t*) audioDataBuffer;;
-    int16_t tmp[200];
+    int16_t *pcm_input = (int16_t*) audioDataBuffer;
+    int16_t *pcm_output = audioDataBuffer + SAMPLES_IN_FRAME;
+
     NS_TRY(ns_timer_init(&tickTimer), "Timer Init Failed\n");
     tic();
     for (int i = 0; i < 500; i++)
     {
         // ns_printf("Sending frame %d\n", i);
-        arm_memcpy_s8((int8_t*) pcm_input, (int8_t*) pt_wav, SAMPLES_IN_FRAME * sizeof(int16_t));
+        arm_memcpy_s8(
+            (int8_t*) pcm_input,
+            (int8_t*) pt_wav,
+             SAMPLES_IN_FRAME * sizeof(int16_t));
 
         AudioPipe_wrapper_frameProc(pcm_input, pcm_output);
 

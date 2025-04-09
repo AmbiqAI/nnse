@@ -5,5 +5,6 @@
 #include "nn_speech.h"
 extern const int32_t feature_mean_se[];
 extern const int32_t feature_stdR_se[];
+#define NUM_LOOKAHEAD 1
 extern PARAMS_NNSP params_nn3_se;
 #endif

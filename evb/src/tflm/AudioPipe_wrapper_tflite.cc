@@ -11,7 +11,7 @@
 #include "ns_ambiqsuite_harness.h"
 #include "nn_speech.h"
 #include "iir.h"
-
+#include "third_party/ns_cmsis_nn/Include/arm_nnsupportfunctions.h"
 extern int tflm_validator_model_init(ns_model_state_t *ms);
 // Feature class instance
 FeatureClass FEAT_INST;
@@ -57,6 +57,10 @@ alignas(16) static uint8_t var_arena[kVarArenaSize];
 volatile int example_status = 0; // Prevent the compiler from optimizing out while loops
 
 extern const int16_t stft_win_coeff_w480_h160[];
+
+
+int8_t num_lookeahead = NUM_LOOKAHEAD;
+int32_t spec_buffer[514 * 4];
 int AudioPipe_wrapper_init(void)
 { 
     FeatureClass_construct(
@@ -120,6 +124,14 @@ int AudioPipe_wrapper_init(void)
 
 int AudioPipe_wrapper_reset(void)
 {
+    int32_t *pt_spec_buffer = spec_buffer;
+    if (num_lookeahead > 0)
+    {
+        for (int i = 0; i < 514 * num_lookeahead; i++)
+        {
+            pt_spec_buffer[i] = 0;
+        }
+    }
     FeatureClass_setDefault(&FEAT_INST);
     IIR_CLASS_reset(&dcrm_inst);
     return 0;
@@ -133,12 +145,38 @@ int AudioPipe_wrapper_frameProc(
     1. iir for dc remove
     2. melspectrogram
     */
+    int32_t *pt_spec = FEAT_INST.state_stftModule.spec;
+    int32_t *pt_spec_buffer = spec_buffer;
+    int32_t tmp_spec[514];
 
     static int16_t tmp_16s[300];
     static float scalar_norm = 1.0 / (float) (1 << FEATURE_QBIT);
     IIR_CLASS_exec(&dcrm_inst, tmp_16s, pcm_input, params_nn3_se.hopsize_stft);
     FeatureClass_execute(&FEAT_INST, tmp_16s);
 
+    // move pt_spec to pt_spec_buffer
+    if (num_lookeahead > 0)
+    {
+        arm_memcpy_s8(
+            (int8_t*) tmp_spec,
+            (int8_t*) pt_spec,
+             514 * sizeof(int32_t));
+
+        arm_memcpy_s8(
+            (int8_t*) pt_spec_buffer,
+            (int8_t*) (pt_spec_buffer + 514),
+            514 * (num_lookeahead-1) * sizeof(int32_t));
+        
+        arm_memcpy_s8(
+            (int8_t*) (pt_spec_buffer + 514 * (num_lookeahead-1)),
+            (int8_t*) pt_spec,
+            514 * sizeof(int32_t));
+
+        arm_memcpy_s8(
+            (int8_t*) pt_spec,
+            (int8_t*) tmp_spec,
+            514 * sizeof(int32_t));
+    }
     int16_t *ptfeat = FEAT_INST.normFeatContext + params_nn3_se.num_mfltrBank * (FEATURE_CONTEXT-1);
 
     float32_t input_scale = tflm.model_input[0]->params.scale;

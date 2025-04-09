@@ -6,6 +6,12 @@ Neural Network Speech Enhancement (NNSE) is a speech enhancement (SE) model base
 1. Added support for the U-Net architecture.
 2. Added TensorFlow Lite for Microcontrollers (TFLM) support (16x8 bit).
 
+## Getting Started
+If you're new to NNSE, begin by cloning the repo and checking out the Python tools for model conversion and training:
+```sh
+git clone https://github.com/AmbiqAI/nnse.git
+cd nnse/python
+```
 ## Directory contents
 ```py
 nnse/ # root 
@@ -16,7 +22,7 @@ nnse/ # root
         make/       # make.mk
         pack/
         src/        # c source codes
-        Makfile
+        Makefile
         autogen.mk
     python/   # for NN training
     README.md # this readme
@@ -81,18 +87,30 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
     tflite_filename=nnse_rnn_int16
     ```
 1. Run the TFLite conversion script
+    
+    **🔹 For Simple RNN Model**
     ```sh
     python c_code_table_converter.py --is_tflite 1 \
       --config_file nn_arch/config_se_nn_arch72_mel.yaml \
       --epoch_loaded 50 \
       --tflite_filename ./$tflite_filename.tflite
     ```
+    or \
+    **🔹 For U-Net Model**
+    ```sh
+    python c_code_table_converter.py --is_tflite 1 \
+      --config_file nn_arch/config_unet_relu_noncausal_sep_specmel_th50.yaml \
+      --epoch_loaded 117 \
+      --tflite_filename ./$tflite_filename.tflite
+    ```
     This script converts the trained model to the TFLite one.
+
 1. Convert the TFLite model to TensorFlow Lite for Microcontrollers (TFLM)
     ```sh
     ./tflm_autodeploy.sh $tflite_filename
     ```
     This script executes the conversion of the TFLite model to a format compatible with TFLM inside `nnse/evb/src/tflm`.
+
 1. **Deployment**
     ```sh
     cd ../evb # go to `nnse/evb`
