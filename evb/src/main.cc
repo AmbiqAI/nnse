@@ -254,7 +254,8 @@ int main(void) {
     // USB. This gives the user a chance to start the server then
     // pressing the button to let the EVB it is ready to start RPCing.
 #if STREAMING==1
-    ns_printf("Type $tools/python audioview_se.py\n");
+    ns_printf("Type $tools/python -m record_10s --tty <your tty>\n");
+    // ns_printf("Type $tools/python audioview_se.py\n");
 #else
     ns_printf("Type $tools/python -m wave_offline -o myaudio.wav -m server\n");
 #endif
@@ -270,7 +271,8 @@ int main(void) {
     // interfaces. Any incoming RPC calls will result in calls to the
     // RPC handler functions defined above.
 
-#if STREAMING==1
+// #if STREAMING==1
+#if 0
     // -- Init the NNSE2 model
     ns_printf("Type $tools/python audioview_se.py\n");
 #if PERF_TEST==0
@@ -325,7 +327,7 @@ int main(void) {
         
     } // while(1)
 #else
-    ns_printf("Type $tools/python -m wave_offline -o myaudio.wav -m server\n");
+    ns_printf("Type $tools/python -m record_10s --tty <your tty>\n");
     AudioPipe_wrapper_init();
     AudioPipe_wrapper_reset();
     int16_t *pt_wav = (int16_t*) data_wav;
@@ -334,27 +336,58 @@ int main(void) {
 
     NS_TRY(ns_timer_init(&tickTimer), "Timer Init Failed\n");
     tic();
-    for (int i = 0; i < 500; i++)
+    g_audioRecording=true;
+    int count_frame=0;
+    while (1)
     {
-        // ns_printf("Sending frame %d\n", i);
-        arm_memcpy_s8(
-            (int8_t*) pcm_input,
-            (int8_t*) pt_wav,
-             SAMPLES_IN_FRAME * sizeof(int16_t));
-
-        AudioPipe_wrapper_frameProc(pcm_input, pcm_output);
-
-        ns_rpc_data_sendBlockToPC(&outBlock);
-        pt_wav += SAMPLES_IN_FRAME;
-
-        ns_rpc_data_computeOnPC(&computeBlock, &resultBlock);
-        int recording=resultBlock.buffer.data[0];
-        ns_rpc_data_clientDoneWithBlockFromPC(&resultBlock);
+        if (g_audioReady) 
+        {
+            // execution of each time frame data
+            if (count_frame%100==0)
+            {
+                ns_printf(".");
+            }
+            
+            AudioPipe_wrapper_frameProc(pcm_input, pcm_output);
+            ns_rpc_data_sendBlockToPC(&outBlock);
+            g_audioReady = false;
+            count_frame++;
+            if (count_frame==1000)
+            {
+                break;
+            }
+        }
     }
+    ns_printf("\n");
+    g_audioRecording = false;
     elapsedTime = toc();
     ns_printf("Elapsed time: %d us\n", elapsedTime);
     ns_rpc_data_remotePrintOnPC(
-        "EVB Says this: 5s Samples Sent.\n");
-    ns_printf("Sent 500 frames. Done\n");
+        "EVB Says this: 10s Samples Sent.\n");
+    ns_printf("Sent 1000 frames. Done\n");
+
+    // tic();
+    // for (int i = 0; i < 500; i++)
+    // {
+    //     // ns_printf("Sending frame %d\n", i);
+    //     arm_memcpy_s8(
+    //         (int8_t*) pcm_input,
+    //         (int8_t*) pt_wav,
+    //          SAMPLES_IN_FRAME * sizeof(int16_t));
+
+    //     AudioPipe_wrapper_frameProc(pcm_input, pcm_output);
+
+    //     ns_rpc_data_sendBlockToPC(&outBlock);
+    //     pt_wav += SAMPLES_IN_FRAME;
+
+    //     // ns_rpc_data_computeOnPC(&computeBlock, &resultBlock);
+    //     // int recording=resultBlock.buffer.data[0];
+    //     // ns_rpc_data_clientDoneWithBlockFromPC(&resultBlock);
+    // }
+    // elapsedTime = toc();
+    // ns_printf("Elapsed time: %d us\n", elapsedTime);
+    // ns_rpc_data_remotePrintOnPC(
+    //     "EVB Says this: 5s Samples Sent.\n");
+    // ns_printf("Sent 500 frames. Done\n");
 #endif
 }

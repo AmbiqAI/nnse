@@ -111,7 +111,8 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
     ```
     This script executes the conversion of the TFLite model to a format compatible with TFLM inside `nnse/evb/src/tflm`.
 
-1. **Deployment**
+### ✅ **Deployment**
+
     ```sh
     cd ../evb # go to `nnse/evb`
     make clean
@@ -127,23 +128,17 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
    cd nnse/python # go to nnse/python folder
    source .venv/bin/activate
    cd tools # go to nnse/python/tools
-   python audioview_se.py --tty /dev/tty.usbmodem1234561 # MacOS
-   python audioview_se.py --tty /dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00 # Ubuntu
-   python audioview_se.py --tty COM4 # Windows
+   python -m record_10s --tty /dev/tty.usbmodem1234561 # MacOS
+   python -m record_10s --tty /dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00 # Ubuntu
+   python -m record_10s --tty COM4 # Windows
    ```
    You should see a GUI popping out as below.
 1. Press button 1 on EVB.\
-    Click the `record` button to start the record. And click `stop` button to finish. The top panel will show the raw audio that microphone records, and the bottom one will show the enhanced audio.
-    <p align="center">
-      <img src="./pics/gui.png"  width="80%">
-    </p>
+    🎧 Initiates a 10-second SE recording session. Ensure you're speaking into the microphone during this time.
 
-   - You might need to change the option `--tty` depending on your OS.
-   - The option `playback=1` means you want to play the enhanced speech on the other computer via internet. One simple example is to use MS Teams (see [here](docs/demo.pdf)).
-      - `Note`: we suggest to use earphone on the host side to avoid the echo effect. 
 1. Check the two recording files under `nnse/python/tools/audio_result/`. 
-   - `audio_raw.wav`: the raw PCM data from your mic.
-   - `audio_se.wav`: the enhanced speech.
+   - `rpc_audio_raw.wav`: the raw PCM data from your mic.
+   - `rpc_audio_en.wav`: the enhanced speech.
 
 ### Using NNSP
 To generate the necessary files for NNSP, follow these steps:
@@ -168,7 +163,7 @@ To generate the necessary files for NNSP, follow these steps:
     make clean
     make model_folder=nnsp
     ```
-The remaining steps are the same as in the TFLM case.
+Follow the steps under the ✅ **Deployment** section.
 
 ## Re-Training a New Model
 
