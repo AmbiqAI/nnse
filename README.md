@@ -137,21 +137,23 @@ To generate a TensorFlow Lite (TFLite) model from a pre-trained model, follow th
 1. Run the appropriate command based on your operating system:
     ```sh
     # macOS
-    python -m record_10s --tty /dev/tty.usbmodem1234561
+    python -m record_evb --tty /dev/tty.usbmodem1234561
 
     # Ubuntu
-    python -m record_10s --tty /dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00
+    python -m record_evb --tty /dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00
 
     # Windows
-    python -m record_10s --tty COM4
+    python -m record_evb --tty COM4
     ```
-1. Press button 1 on EVB.
-    - 🎧 This initiates a 10-second SE recording session. 
-    - Ensure you're speaking into the microphone during this time.
+1. Start SE Recording
+    - Press Button 1 on the EVB to begin a speech enhancement (SE) recording session.
+    - Speak clearly into the microphone while the recording is active.
+    - Press Button 1 again to stop the recording.
+
 
 1. Check the two recording files under `nnse/python/tools/audio_result/`. 
-   - `rpc_audio_raw.wav`: the raw PCM data from your mic.
-   - `rpc_audio_en.wav`: the enhanced speech.
+    - `rpc_audio_raw.wav`: the raw PCM data from your mic.
+    - `rpc_audio_en.wav`: the enhanced speech.
 
 ### Using NNSP
 To generate the necessary files for NNSP, follow these steps:

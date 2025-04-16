@@ -30,8 +30,9 @@
 #include "AudioPipe_wrapper.h"
 #include "def_AudioSystem.h"
 #include "third_party/ns_cmsis_nn/Include/arm_nnsupportfunctions.h"
-#define STREAMING 1
-#define PERF_TEST 0
+#define RECORD_10S 1
+#define AUDIO_ON 1
+#define PERF_TEST 1
 static uint32_t elapsedTime = 0;
 ns_timer_config_t tickTimer = {
     .api = &ns_timer_V1_0_0,
@@ -54,9 +55,9 @@ volatile bool static g_audioReady = false;
 volatile bool static g_audioRecording = false;
 
 #if NUM_CHANNELS == 1
-int16_t static audioDataBuffer[SAMPLES_IN_FRAME * NUM_CHANNELS * 2]; // incoming PCM audio data
+int16_t static audioDataBuffer[SAMPLES_IN_FRAME * NUM_CHANNELS * 2+1]; // incoming PCM audio data
 #else
-int32_t static audioDataBuffer[SAMPLES_IN_FRAME * NUM_CHANNELS * 2];
+int32_t static audioDataBuffer[SAMPLES_IN_FRAME * NUM_CHANNELS * 2+1];
 #endif
 
 alignas(16) uint32_t static dmaBuffer[SAMPLES_IN_FRAME * NUM_CHANNELS * 2];     // DMA target
@@ -135,7 +136,7 @@ int main(void) {
         .button_0_flag = &g_intButtonPressed,
         .button_1_flag = NULL};
     NS_TRY(ns_peripheral_button_init(&button_config), "Button init failed\n");
-#if STREAMING==1 // only activate audio if streaming is enabled
+#if AUDIO_ON==1 // only activate audio if streaming is enabled
     // -- Audio init
     NS_TRY(ns_audio_init(&audioConfig), "Audio Initialization Failed.\n");
     NS_TRY(ns_audio_set_gain(AM_HAL_PDM_GAIN_P195DB, AM_HAL_PDM_GAIN_P195DB), "Gain set failed.\n");
@@ -253,16 +254,14 @@ int main(void) {
     // To address this, we loop waiting for a button press, servicing
     // USB. This gives the user a chance to start the server then
     // pressing the button to let the EVB it is ready to start RPCing.
-#if STREAMING==1
-    ns_printf("Type $tools/python -m record_10s --tty <your tty>\n");
-    // ns_printf("Type $tools/python audioview_se.py\n");
-#else
-    ns_printf("Type $tools/python -m wave_offline -o myaudio.wav -m server\n");
-#endif
+
+    ns_printf("Type $tools/python -m record_evb --tty <your tty>\n");
+
     ns_printf("Start the PC-side server, then press Button 0 to get started\n");
     while (g_intButtonPressed == 0) {
         ns_delay_us(1000);
     }
+
     // g_intButtonPressed is retired after this point.
     ns_printf("Starting remote procedure call demo.\n");
 
@@ -271,8 +270,7 @@ int main(void) {
     // interfaces. Any incoming RPC calls will result in calls to the
     // RPC handler functions defined above.
 
-// #if STREAMING==1
-#if 0
+#if RECORD_10S==0
     // -- Init the NNSE2 model
     ns_printf("Type $tools/python audioview_se.py\n");
 #if PERF_TEST==0
@@ -327,67 +325,66 @@ int main(void) {
         
     } // while(1)
 #else
-    ns_printf("Type $tools/python -m record_10s --tty <your tty>\n");
+    
+    #if PERF_TEST==0
     AudioPipe_wrapper_init();
-    AudioPipe_wrapper_reset();
-    int16_t *pt_wav = (int16_t*) data_wav;
-    int16_t *pcm_input = (int16_t*) audioDataBuffer;
-    int16_t *pcm_output = audioDataBuffer + SAMPLES_IN_FRAME;
-
+    #endif
+    
+    int16_t *pt_button_send=(int16_t*) audioDataBuffer + 2 * SAMPLES_IN_FRAME;
     NS_TRY(ns_timer_init(&tickTimer), "Timer Init Failed\n");
     tic();
-    g_audioRecording=true;
-    int count_frame=0;
     while (1)
     {
-        if (g_audioReady) 
+        while (1)
         {
-            // execution of each time frame data
-            if (count_frame%100==0)
+            if (g_intButtonPressed==1)
             {
-                ns_printf(".");
-            }
-            
-            AudioPipe_wrapper_frameProc(pcm_input, pcm_output);
-            ns_rpc_data_sendBlockToPC(&outBlock);
-            g_audioReady = false;
-            count_frame++;
-            if (count_frame==1000)
-            {
+                g_audioRecording = true;
+                g_intButtonPressed=0;
+                AudioPipe_wrapper_reset();
+                ns_printf("Recording...\n");
+                ns_printf("Press Button 0 to stop recording\n");
                 break;
             }
+            am_hal_delay_us(20000);
         }
+        int count_frame=0;
+        while (1)
+        {
+            if (g_audioReady) 
+            {
+                // execution of each time frame data
+                if (count_frame%100==0)
+                {
+                    count_frame=0;
+                    ns_printf(".");
+                }
+                
+                AudioPipe_wrapper_frameProc(pcm_input, pcm_output);
+                if (g_intButtonPressed==1)
+                    *pt_button_send=1;
+                else
+                    *pt_button_send=0;
+                ns_rpc_data_sendBlockToPC(&outBlock);
+                g_audioReady = false;
+                count_frame++;
+                if (g_intButtonPressed==1)
+                {
+                    g_audioRecording = false;
+                    g_audioReady = false;
+                    g_intButtonPressed=0;
+                    break;
+                }
+            }
+        }
+        ns_printf("\nPress Button 0 to start recording\n");
     }
     ns_printf("\n");
-    g_audioRecording = false;
     elapsedTime = toc();
     ns_printf("Elapsed time: %d us\n", elapsedTime);
     ns_rpc_data_remotePrintOnPC(
-        "EVB Says this: 10s Samples Sent.\n");
-    ns_printf("Sent 1000 frames. Done\n");
+        "EVB Says this: Samples Sent.\n");
+    ns_printf("Done\n");
 
-    // tic();
-    // for (int i = 0; i < 500; i++)
-    // {
-    //     // ns_printf("Sending frame %d\n", i);
-    //     arm_memcpy_s8(
-    //         (int8_t*) pcm_input,
-    //         (int8_t*) pt_wav,
-    //          SAMPLES_IN_FRAME * sizeof(int16_t));
-
-    //     AudioPipe_wrapper_frameProc(pcm_input, pcm_output);
-
-    //     ns_rpc_data_sendBlockToPC(&outBlock);
-    //     pt_wav += SAMPLES_IN_FRAME;
-
-    //     // ns_rpc_data_computeOnPC(&computeBlock, &resultBlock);
-    //     // int recording=resultBlock.buffer.data[0];
-    //     // ns_rpc_data_clientDoneWithBlockFromPC(&resultBlock);
-    // }
-    // elapsedTime = toc();
-    // ns_printf("Elapsed time: %d us\n", elapsedTime);
-    // ns_rpc_data_remotePrintOnPC(
-    //     "EVB Says this: 5s Samples Sent.\n");
-    // ns_printf("Sent 500 frames. Done\n");
 #endif
 }
