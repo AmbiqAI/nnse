@@ -48,6 +48,45 @@ def make_tfrecord(
             serialized = seq_example.SerializeToString()
             writer.write(serialized)
 
+def make_raw_tfrecord(
+        fname,
+        audio_sn,
+        audio_s):
+    """
+    Make tfrecord
+    """
+    with tf.io.TFRecordWriter(fname) as writer:
+
+        timesteps = audio_s.shape[0]
+        # pspec_sn = pspec_sn.reshape([-1])
+        # pspec_s  = pspec_s.reshape([-1])
+
+        step_feature = tf.train.Feature(
+            int64_list = tf.train.Int64List(value = [timesteps]))
+
+        audio_sn_feature = tf.train.Feature(
+            float_list = tf.train.FloatList(value = audio_sn))
+
+        audio_s_feature = tf.train.Feature(
+            float_list = tf.train.FloatList(value = audio_s))
+
+        context = tf.train.Features(feature = {
+                "length"    : step_feature,
+            })
+
+        feature_lists = tf.train.FeatureLists(feature_list={
+                "audio_sn" : tf.train.FeatureList(feature = [audio_sn_feature]),
+                "audio_s"  : tf.train.FeatureList(feature = [audio_s_feature]),
+            })
+
+        seq_example = tf.train.SequenceExample( # context and feature_lists
+            context = context,
+            feature_lists = feature_lists,
+        )
+
+        serialized = seq_example.SerializeToString()
+        writer.write(serialized)
+
 def make_target_template(targets, idx_starts, widths, steps):
     """
     Make a rectangular function for a template

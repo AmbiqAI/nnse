@@ -81,6 +81,31 @@ def deepfiltering_np(
     ave_mask = np.mean(tfmask, axis=-2)
 
     return estimation, ave_mask
+def stft_projection_loss(
+        target_mag,
+        estimate_mag,
+        masking,
+        eps=1e-8):
+    """
+    Spectral projection loss (SI-SDR-like in magnitude STFT domain)
+    """
+    # Zero-mean along time axis (optional, depending on use)
+    target_zm = target_mag - tf.reduce_mean(target_mag, axis=-1, keepdims=True)
+    estimate_zm = estimate_mag - tf.reduce_mean(estimate_mag, axis=-1, keepdims=True)
+
+    # Project estimate onto target
+    dot = tf.reduce_sum(estimate_zm * target_zm, axis=-1, keepdims=True)
+    energy = tf.reduce_sum(target_zm ** 2, axis=-1, keepdims=True) + eps
+    scale = dot / energy
+    projection = scale * target_zm
+    noise = estimate_zm - projection
+
+    steps = tf.reduce_sum(masking)
+    ratio = tf.reduce_sum(projection ** 2, axis=-1) / (tf.reduce_sum(noise ** 2, axis=-1) + eps)
+    sdr = 10 * tf.math.log(ratio + eps) / tf.math.log(10.0)
+    sdr_neg = -tf.reduce_sum(sdr)/steps
+    
+    return  sdr_neg, steps # Minimize negative SDR
 
 def loss_mse(
         target,       # trget
@@ -126,4 +151,18 @@ def loss_sdr(clean,
     steps = tf.reduce_sum(masking)
     ave_loss = loss / steps
     return ave_loss, steps
-    
+
+def loss_logPowerSpec(clean,
+             est,
+             masking,
+             eps=10**-5):
+    """
+    distortion / signal
+    """
+    logClean= tf.math.log(clean+eps)
+    logEst= tf.math.log(est+eps)
+   
+    loss = tf.reduce_sum(masking * (logEst - logClean)**2)
+    steps = tf.reduce_sum(masking)
+    ave_loss = loss / steps
+    return ave_loss, steps

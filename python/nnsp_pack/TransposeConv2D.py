@@ -25,10 +25,10 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
             padding=((0, 0),(len_filter_freq-1,len_filter_freq-1))
         )
         
-        # if normalization_layer is None:
-        #     use_bias=True
-        # else:
-        #     use_bias=False
+        if normalization_layer is None:
+            use_bias=True
+        else:
+            use_bias=False
         self.depthwise = tf.keras.layers.Conv2D(
             filters=num_channels_in,
             kernel_size=kernel_size,
@@ -41,10 +41,23 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
             kernel_size=(1, 1),
             strides=(1, 1),
             padding='valid',
-            use_bias=True,
-            kernel_initializer=kernel_initializer,
-            activation=activation)
-
+            use_bias=use_bias,
+            kernel_initializer=kernel_initializer)
+        if normalization_layer == 'layernorm':
+            self.normalization_layer = tf.keras.layers.LayerNormalization(axis=[2,3])
+        elif normalization_layer == 'batchnorm':
+            self.normalization_layer = tf.keras.layers.BatchNormalization()
+        else:
+            self.normalization_layer = None
+        
+        if activation == 'tanh':
+            self.activation = tf.nn.tanh
+        elif activation == 'relu':
+            self.activation = tf.nn.relu
+        elif activation == 'sigmoid':
+            self.activation = tf.nn.sigmoid
+        else:
+            self.activation = None
         self.zeros=tf.zeros(
             (batch_size,
              time_steps + self.kernel_size_time - 1,
@@ -64,7 +77,10 @@ class SeparableTransposeConv2D(tf.keras.layers.Layer):
         outputs = self.depthwise(inputs_up)
 
         outputs = self.pointwise(outputs)
-
+        if self.normalization_layer is not None:
+            outputs = self.normalization_layer(outputs)
+        if self.activation is not None:
+            outputs = self.activation(outputs)
         return outputs
 
 class TransposeConv2D(tf.keras.layers.Layer):
