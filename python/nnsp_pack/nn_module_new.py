@@ -115,7 +115,6 @@ class NeuralNetClass(tf.keras.Model):
                     time_steps=time_steps,
                     dim_feat=self.dim_feat,
                     normalization_layer=da['normalization_layer'],
-                    dropout=drop_rate,
                     )
                 self.kernel_size_time = da['kernel_size_time']
 

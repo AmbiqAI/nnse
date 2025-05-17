@@ -3,7 +3,6 @@ Training script for SE RNN
 """
 import os
 import re
-import time
 import datetime
 import logging
 import argparse
@@ -15,14 +14,13 @@ import matplotlib.pyplot as plt
 from nnsp_pack.nn_module_new import NeuralNetClass
 from nnsp_pack.statsClass import tf_round
 from nnsp_pack.tfrecord_converter_se_split import tfrecords_pipeline
-from nnsp_pack.loss_functions import loss_logPowerSpec, loss_mse,stft_projection_loss, loss_sdr
+from nnsp_pack.loss_functions import loss_mse
 from nnsp_pack.learn_rate import NoamAnnelingLRSchedule, CosineSchedule
 from nnsp_pack.converter_fix_point import fakefix_tf
 from nnsp_pack.calculate_feat_stats_se_split import feat_stats_estimator
 from nnsp_pack.load_nn_arch import load_nn_arch, setup_nn_folder
 from nnsp_pack.tf_basic_math import tf_log10_eps
 from nnsp_pack.mel_spec_gen import melspec_gen
-from data_se import params_audio as params_audio_def
 # import c_code_table_converter
 RESET_EVERY_AUDIO_CLIP = False
 SHOW_STEPS          = False
@@ -35,7 +33,6 @@ try:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 except: # pylint: disable=bare-except
     pass
-
 
 @tf.function
 def train_kernel(
@@ -62,21 +59,12 @@ def train_kernel(
                 quantized   = quantized)
         amp_sn = tf.math.sqrt(pspec_sn)
         amp_s  = tf.math.sqrt(pspec_s)
-        ave_loss0, steps = loss_mse(
+        ave_loss, steps = loss_mse(
                 amp_s,        # clean
                 amp_sn * est, # noisy * mask
                 mask,
-                exp=0.3)
-        ave_loss1, steps = loss_mse(
-                        amp_s,        # clean
-                        amp_sn * est, # noisy * mask
-                        mask,
-                        exp=1.0)
-        ave_loss=0.7 * ave_loss0 + 0.3 * ave_loss1
-        # ave_loss, steps = loss_logPowerSpec(
-        #         amp_s,        # clean
-        #         amp_sn * est, # noisy * mask
-        #         mask)
+                exp=0.6)
+
     if training:
         gradients = tape.gradient(ave_loss, net.trainable_variables)
 
@@ -160,9 +148,9 @@ def epoch_proc(
             if batch % BLOCKS_PER_AUDIO == (BLOCKS_PER_AUDIO-1):
                head_pspec_s, head_pspec_sn = reset_states()
         if num_lookahead > 0: # non-causal
-            tmp_s = tf.concat( [head_pspec_s,  pspec_s], 1)
+            tmp_s = tf.concat([head_pspec_s, pspec_s], 1)
             tmp_sn = tf.concat([head_pspec_sn, pspec_sn], 1)
-            head_pspec_s  = tf.identity(pspec_s[:,-num_lookahead:,:])
+            head_pspec_s  =  tf.identity(pspec_s[:,-num_lookahead:,:])
             head_pspec_sn = tf.identity(pspec_sn[:,-num_lookahead:,:])
             pspec_s  =  tmp_s[:,:-num_lookahead,:]
             pspec_sn = tmp_sn[:,:-num_lookahead,:]
@@ -242,118 +230,6 @@ def epoch_proc(
                 plt.show()
     tf.print('\n', end = '')
 
-
-def test_mos(
-        args,
-        nn_train_raw,
-        config,
-        feat_stats,
-        mat_feat = None):
-    """ test function"""
-    from nnsp_pack.feature_module import FeatureClass
-    from nnsp_pack.basic_dsp import dc_remove
-    from nnsp_pack.tflite_convert import warp_tf_model, tflite_convert
-
-    from data_se import params_audio as params_audio_def
-    from nnsp_pack.test_torch_pesq import test_audio_quality
-    from torchmetrics.functional.audio.dnsmos import deep_noise_suppression_mean_opinion_score
-    import torch
-    from nnsp_pack.tf_stft import tf_stft, tf_istft, window_fn
-    from nnsp_pack.tfrecord_converter_se_rawspeech import tfrecords_pipeline as tfrecords_raw_pipeline
-    
-    num_lookahead = config['feat']['num_lookahead']
-    dim_feat = config['nn_arch'][0]['layer_neurons']
-    batchsize=20
-    time_steps = 1000
-    @tf.function
-    def inference(nfeats):
-        tfmask = nn_infer(
-                nfeats,
-                training=False
-                )
-        return tfmask
-
-    with open('data/test_tfrecords_se_raw.csv') as file:
-        lines = file.readlines()
-        fnames = [line.strip() for line in lines]
-    _, dataset = tfrecords_raw_pipeline(
-                    fnames,
-                    batchsize = batchsize,
-                    is_shuffle=False)
-    nn_infer = NeuralNetClass(
-        config=config['nn_arch'],
-        batchsize= batchsize,
-        time_steps= time_steps,
-        unroll_rnn=False,
-        norm_mean=feat_stats['nMean_feat'],
-        norm_inv_std=feat_stats['nInvStd'],
-        )
-
-    # only copy the trainable variables
-    for u,v in zip(nn_train_raw.trainable_variables, nn_infer.trainable_variables):
-        v.assign(u)
-
-    score_total = 0
-    tot_samples=0
-    for batch, data  in enumerate(dataset):
-        print(f"\rProcessing batch {batch}/{len(fnames)//batchsize}", end = '')
-        audio_sn, audio_s, length = data
-        audio_sn = audio_sn[:,0,:]
-        audio_s = audio_s[:,0,:]
-        # import pdb; pdb.set_trace()
-        # print(f"Batch {batch}")
-        # print('pspec_sn shape:', audio_sn.shape)
-        # print('pspec_s shape:', audio_s.shape)
-
-        # feature extraction
-        start = time.time()
-        spec_sn =  tf_stft(
-            audio_sn,
-            params_audio_def['win_size'],
-            params_audio_def['hop'],
-            params_audio_def['len_fft'])
-        print("\nSTFT time:", time.time()-start)
-        pspec_sn= tf.abs(spec_sn)**2
-        pspec_sn_tmp = tf.constant(pspec_sn, dtype=tf.float32)
-
-        feats = tf.matmul(pspec_sn_tmp, mat_feat)
-        feats = tf_log10_eps(feats)
-        feats = fakefix_tf(feats, 32, 15)
-
-        nfeats = (feats - feat_stats['nMean_feat']) * feat_stats['nInvStd']
-        nfeats = fakefix_tf(nfeats, 16, 8)
-
-        nn_infer.reset_states(zero_state=True)
-
-        start = time.time()
-        tfmask = inference(nfeats)
-        print("Inference time:", time.time()-start)
-        if num_lookahead > 0:
-            # non-causal: use the first num_lookahead frames
-            spec_sn = spec_sn[:,:-num_lookahead,:]
-            tfmask  = tfmask[:,num_lookahead:,:]
-
-        spec_en = tf.cast(tfmask, tf.complex64) * spec_sn
-        start = time.time()
-        audio_en = tf_istft(
-            spec_en,
-            params_audio_def['win_size'],
-            params_audio_def['hop'], 
-            params_audio_def['len_fft'])
-        print("ISTFT time:", time.time()-start)
-        # print("Enhanced speech mos.")
-        torch_tensor = torch.from_numpy(audio_en.numpy())
-        
-        start=time.time()
-        scores = deep_noise_suppression_mean_opinion_score(torch_tensor, 16000, False)
-        print("DNSMOS time:", time.time()-start)
-        # print(f"DNSMOS Score: {scores}[p808_mos, mos_sig, mos_bak, mos_ovr]")
-        score_total += scores.numpy()
-        tot_samples += batchsize
-        # import pdb; pdb.set_trace()
-    scores = np.sum(score_total, axis=0) / tot_samples
-    print(f"DNSMOS Score: {scores}[p808_mos, mos_sig, mos_bak, mos_ovr]")
-
 def test(
         args,
         nn_train_raw,
@@ -370,7 +246,6 @@ def test(
     from nnsp_pack.test_torch_pesq import test_audio_quality
     from torchmetrics.functional.audio.dnsmos import deep_noise_suppression_mean_opinion_score
     import torch
-
     num_lookahead = config['feat']['num_lookahead']
     dim_feat = config['nn_arch'][0]['layer_neurons']
     wavfile = args.test_wavefile
@@ -401,28 +276,16 @@ def test(
     feats = tf.matmul(pspec_sn_tmp, mat_feat)
     feats = tf_log10_eps(feats)
     feats = fakefix_tf(feats, 32, 15)
+
     nfeats = (feats - feat_stats['nMean_feat']) * feat_stats['nInvStd']
     nfeats = fakefix_tf(nfeats, 16, 8)
 
     stream=True
+    nn_train_raw.reset_states(zero_state=True)
     time_steps = 1 if stream else nfeats.shape[1]
-    nn_infer = NeuralNetClass(
-        config=config['nn_arch'],
-        batchsize= 1,
-        time_steps= time_steps,
-        unroll_rnn=True,
-        norm_mean=feat_stats['nMean_feat'],
-        norm_inv_std=feat_stats['nInvStd'],
-        )
-
-    # only copy the trainable variables
-    for u,v in zip(nn_train_raw.trainable_variables, nn_infer.trainable_variables):
-        v.assign(u)
-
-    nn_infer.reset_states(zero_state=True)
 
     nn_train = warp_tf_model(
-        nn_infer,
+        nn_train_raw,
         time_steps=time_steps,
         dim_feat=dim_feat,)
 
@@ -444,12 +307,12 @@ def test(
 
     # tflite
     dtype=args.dtype_tflite
-    nn_infer.reset_states(zero_state=True)
+    nn_train_raw.reset_states(zero_state=True)
     nn_train = warp_tf_model(
-        nn_infer,
+        nn_train_raw,
         time_steps=time_steps,
         dim_feat=dim_feat,)
-
+    
     tflite_fp16_model = tflite_convert(
         nn_train,
         dtype=dtype,
@@ -476,30 +339,25 @@ def test(
             nfeat_np = nfeat_np.astype(np.int8)
         elif dtype == "int16":
             nfeat_np = nfeat_np.astype(np.int16)
-
-    if stream:
-        out = []
-        for i in range(nfeat_np.shape[1]):
-            print(f"\rProcessing frame {i}/{nfeat_np.shape[1]}", end = '')
-            input_data = nfeat_np[:,i:i+1,:]
-            interpreter.set_tensor(
-                input_details['index'],
-                input_data)
-
-            interpreter.invoke()
-
-            # The function `get_tensor()` returns a copy of the tensor data.
-            # Use `tensor()` in order to get a pointer to the tensor.
-            output_data = interpreter.get_tensor(output_details['index'])
-            out += [output_data]
-
-        out = np.concatenate(out, axis=1)[0]
-    else:
+    # np.save('mel_input.npy', nfeat_np)  # Save the input for debugging
+    # import pdb; pdb.set_trace()  # This will pause execution and allow you to inspect variables
+    # run tflite inference on true data
+    out = []
+    for i in range(nfeat_np.shape[1]):
+        print(f"\rProcessing frame {i}/{nfeat_np.shape[1]}", end = '')
+        input_data = nfeat_np[:,i:i+1,:]
         interpreter.set_tensor(
             input_details['index'],
-            nfeat_np)
+            input_data)
+
         interpreter.invoke()
-        out = interpreter.get_tensor(output_details['index'])[0]
+
+        # The function `get_tensor()` returns a copy of the tensor data.
+        # Use `tensor()` in order to get a pointer to the tensor.
+        output_data = interpreter.get_tensor(output_details['index'])
+        out += [output_data]
+
+    out = np.concatenate(out, axis=1)[0]
 
     if dtype in ("int8", "int16"):
         output_scale, output_zero_point = output_details["quantization"]
@@ -507,13 +365,13 @@ def test(
 
     tfmask_lite=out
     tfmask=tfmask[0].numpy()
-    nfeats=nfeats[0].numpy()
-    feats=feats[0].numpy()
-    if num_lookahead > 0:
-        spec_sn = np.pad(
-            spec_sn,
-            [(num_lookahead, 0),(0,0)],
-            mode='constant')[:-num_lookahead,:]
+    nfeats=nfeats[0].numpy()[num_lookahead:,:]
+    feats=feats[0].numpy()[num_lookahead:,:]
+
+    if num_lookahead > 0: # non-causal
+        tfmask = tfmask[num_lookahead:,:]
+        tfmask_lite = tfmask_lite[num_lookahead:,:]
+        spec_sn = spec_sn[:-num_lookahead,:]
 
     audio_out, spec_en = feat_inst.istft_frame_proc(
         spec_sn,
@@ -539,18 +397,17 @@ def test(
         enhanced_wav,
         audio_out,
         fs_trgt)
-    print("")
 
-    print(f"Noisy speech mos")
+    print(f"\nNoisy speech mos")
     torch_tensor = torch.from_numpy(speech)
     scores = deep_noise_suppression_mean_opinion_score(torch_tensor, 16000, False)
     print(f"DNSMOS Score: {scores}[p808_mos, mos_sig, mos_bak, mos_ovr]")
-
+    
     print("Enhanced speech mos.")
     torch_tensor = torch.from_numpy(audio_out)
     scores = deep_noise_suppression_mean_opinion_score(torch_tensor, 16000, False)
+    
     print(f"DNSMOS Score: {scores}[p808_mos, mos_sig, mos_bak, mos_ovr]")
-
     test_audio_quality(noisy_wav, enhanced_wav)
     print(f'Check your noisy speech in test_results/{name}/noisy.wav')
     print(f'Check your enhanced speeech in test_results/{name}/enhance_{dtype}.wav')
@@ -559,7 +416,7 @@ def test(
 
     plt.subplot(4,1,1)
     plt.imshow(
-        pspec_en.T,
+        feats.T,
         origin      = 'lower',
         cmap        = 'pink_r',
         aspect      = 'auto')
@@ -584,7 +441,6 @@ def test(
         vmax=1)
     plt.title('Reference TF-Mask (float32)')
     plt.colorbar()
-
     plt.subplot(4,1,4)
     plt.imshow(
         tfmask_lite.T,
@@ -616,7 +472,6 @@ def main(args):
     num_epoch       = args.num_epoch
     epoch_loaded    = args.epoch_loaded
     quantized       = args.quantized
-    warmup_steps    = args.warmup_steps
     tfrecord_list = {   'train' : args.train_list,
                         'test'  : args.test_list}
     fnames = {}
@@ -629,13 +484,7 @@ def main(args):
             else:
                 len0 = int(len(lines) / batchsize) * batchsize
                 fnames[tr_set] = [line.strip() for line in lines[:len0]]
-                import random
-                random.seed(42)
-                random.shuffle(fnames[tr_set])
-                if tr_set=='train':
-                    fnames[tr_set] = fnames[tr_set][1:2000]
-                else:
-                    fnames[tr_set] = fnames[tr_set][1:500]
+                # fnames[tr_set] = fnames[tr_set][1:100]
     _, dataset = tfrecords_pipeline(
             fnames['train'],
             batchsize = batchsize,
@@ -749,7 +598,7 @@ def main(args):
 
     lr_schedule=CosineSchedule(
         base_lr=args.learning_rate,
-        warmup_steps=warmup_steps,
+        warmup_steps=2000,
         total_steps=num_epoch * shift_step,
         start_step =epoch1_loaded * shift_step)
 
@@ -764,21 +613,27 @@ def main(args):
         tot+=v.numpy().size
     print(f"Total number of parameters: {tot}")
 
-    if args.mode == 'test_mos':
-        test_mos(
+    if args.mode == 'test':
+        nn_infer = NeuralNetClass(
+        config=config_nn,
+        batchsize= 1,
+        time_steps= 1,
+        unroll_rnn=unroll_rnn,
+        norm_mean=feat_stats['nMean_feat'],
+        norm_inv_std=feat_stats['nInvStd'],
+        )
+
+        # only copy the trainable variables
+        for u,v in zip(nn_train.trainable_variables, nn_infer.trainable_variables):
+            v.assign(u)
+
+
+        test(
             args,
-            nn_train,
+            nn_infer,
             config,
             feat_stats,
             mat_feat=mat_feat,)
-        return
-    elif args.mode == 'test':
-        test(
-            args,
-            nn_train,
-            config,
-            feat_stats,
-            mat_feat=mat_feat)
         return
 
     for epoch in range(epoch1_loaded, num_epoch):
@@ -804,22 +659,22 @@ def main(args):
                 mat_feat=mat_feat,
                 )
 
-        # # Computing Training loss
-        # epoch_proc(
-        #     nn_train,
-        #     optimizer,
-        #     dataset_tr,
-        #     fnames['train'],
-        #     batchsize,
-        #     timesteps,
-        #     training        = False,
-        #     zero_state      = True,
-        #     feat_stats      = feat_stats,
-        #     config_feat     = config_feat,
-        #     epoch           = epoch,
-        #     quantized       = quantized,
-        #     mat_feat=mat_feat,
-        #     )
+        # Computing Training loss
+        epoch_proc(
+            nn_train,
+            optimizer,
+            dataset_tr,
+            fnames['train'],
+            batchsize,
+            timesteps,
+            training        = False,
+            zero_state      = True,
+            feat_stats      = feat_stats,
+            config_feat     = config_feat,
+            epoch           = epoch,
+            quantized       = quantized,
+            mat_feat=mat_feat,
+            )
 
         loss['train'][epoch] = nn_train.stats_inst.stats['acc_loss'] / nn_train.stats_inst.stats['acc_steps']
         loss['train'][epoch] /= config_nn[-1]['layer_neurons']
@@ -878,14 +733,14 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-m',
         '--mode',
-        default='train',
+        default='test',
         type=str,
         help='test or train')
 
     argparser.add_argument(
         '-dt',
         '--dtype_tflite',
-        default='float32',
+        default='int16',
         type=str,
         help='data type to convert tflite \
             int16, int8, or float16 or float32')
@@ -899,7 +754,7 @@ if __name__ == "__main__":
     argparser.add_argument(
         '-a',
         '--config_file',
-        default='nn_arch/config_unet_relu_noncausal_sep_mel_large.yaml',
+        default='nn_arch/config_unet_relu_noncausal_sep_specmel_th50.yaml',
         help='nn architecture')
 
     argparser.add_argument(
@@ -948,17 +803,11 @@ if __name__ == "__main__":
         type=int,
         default=150,
         help='Number of epochs to train')
-    argparser.add_argument(
-        '-ws',
-        '--warmup_steps',
-        type=int,
-        default=2000,
-        help='warmup steps')
-    
+
     argparser.add_argument(
         '-e',
         '--epoch_loaded',
-        default="random",
+        default=117,
         help='epoch_loaded = \'random\': weight table is randomly generated, \
               epoch_loaded = \'latest\': weight table is loaded from the latest saved epoch result \
               epoch_loaded = 10  \

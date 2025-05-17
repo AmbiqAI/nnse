@@ -32,7 +32,7 @@ class SeparableConv2D(tf.keras.layers.Layer):
             normalization_layer=None,
             **kwargs):
         super(SeparableConv2D, self).__init__(**kwargs)
-        
+
         if normalization_layer is None:
             use_bias=True
         else:
@@ -51,34 +51,16 @@ class SeparableConv2D(tf.keras.layers.Layer):
             kernel_size=(1, 1),
             strides=(1, 1),
             padding='same',
-            use_bias=use_bias,
+            use_bias=True,
             kernel_initializer='he_normal',
+            activation=activation,
             )
-        
-        if normalization_layer == 'layernorm':
-            self.normalization_layer = tf.keras.layers.LayerNormalization(axis=[2,3])
-        elif normalization_layer == 'batchnorm':
-            self.normalization_layer = tf.keras.layers.BatchNormalization()
-        else:
-            self.normalization_layer = None
-        
-        if activation == 'tanh':
-            self.activation = tf.nn.tanh
-        elif activation == 'relu':
-            self.activation = tf.nn.relu
-        elif activation == 'sigmoid':
-            self.activation = tf.nn.sigmoid
-        else:
-            self.activation = None
 
     def call(self, inputs):
         """ Forward pass"""
         x = self.depthwise(inputs)
         x = self.pointwise(x)
-        if self.normalization_layer is not None:
-            x = self.normalization_layer(x)
-        if self.activation is not None:
-            x = self.activation(x)
+
         return x
 
 class encoder_unet(tf.keras.layers.Layer):
@@ -96,7 +78,6 @@ class encoder_unet(tf.keras.layers.Layer):
             norm_inv_std=None,
             dim_feat=257,
             normalization_layer=None,
-            dropout=0.0,
             **kwargs):
         super(encoder_unet, self).__init__(**kwargs)
         self.norm_mean = norm_mean
@@ -114,13 +95,9 @@ class encoder_unet(tf.keras.layers.Layer):
         stages = len(self.num_chs) - 1
         self.states = self.make_states()
         for i , num_ch, num_ch_in in zip(range(stages), self.num_chs[1:], self.num_chs[:-1]):
+
             layer=tf.keras.Sequential(name=f"encoder_{i}")
-            if i == 0:
-                droprate=0.1
-            else:
-                droprate=dropout
-            dropout_layer=tf.keras.layers.SpatialDropout2D(droprate)
-            layer.add(dropout_layer)
+
             if separable:
                 layer.add(
                     SeparableConv2D(
@@ -143,6 +120,7 @@ class encoder_unet(tf.keras.layers.Layer):
                         kernel_initializer='he_normal',
                         name=f"conv_{i}"
                         ))
+
             self.convs += [layer]
 
     def make_states(
@@ -216,7 +194,7 @@ class encoder_unet(tf.keras.layers.Layer):
             state, net = layer_info
             x = tf.concat([state, x], axis=1)
             state_update=tf.identity(x[:,-(self.kernel_size_time-1):,:,:])
-            x = net(x, training=training)
+            x = net(x)
             self.states[i].assign(state_update)
             outputs+= [x]
 
@@ -378,7 +356,6 @@ class unet(tf.keras.layers.Layer):
             norm_inv_std=None,
             dim_feat=257,
             normalization_layer=None,
-            dropout=0.0,
             **kwargs):
         super(unet,self).__init__(**kwargs)
 
@@ -397,9 +374,7 @@ class unet(tf.keras.layers.Layer):
             norm_mean=norm_mean,
             norm_inv_std=norm_inv_std,
             dim_feat=dim_feat,
-            normalization_layer=normalization_layer,
-            dropout=dropout,  # dropout rate
-            )
+            normalization_layer=normalization_layer,)
         self.decoder = decoder_unet(
             output_size=output_size,
             batch_size=batch_size,
@@ -424,7 +399,6 @@ class unet(tf.keras.layers.Layer):
             stateful=False,
             unroll=unroll_rnn,
             return_sequences=True)
-        self.dropout=tf.keras.layers.SpatialDropout2D(dropout)
 
     def reset_states(self, zero_state=False):
         """ Reset states"""
@@ -493,18 +467,14 @@ class unet(tf.keras.layers.Layer):
         out = tf.reshape(
             outputs[-1],
             (self.batch_size, T, -1))
-        out, h_state, c_state = self.rnn(
-            out,
-            initial_state=self.states)
+        out, h_state, c_state = self.rnn(out, initial_state=self.states)
 
         self.states[0].assign(h_state)
         self.states[1].assign(c_state)
         input_dec = tf.reshape(
             out,
             (self.batch_size, T, self.F, self.chs))
-        input_dec = self.dropout(
-            input_dec,
-            training=training)
+        
         # decoder
         output = self.decoder(
             input_dec,
