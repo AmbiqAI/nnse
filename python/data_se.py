@@ -10,15 +10,13 @@ import multiprocessing
 import logging
 import random
 import numpy as np
-import wandb
-import boto3
+# import wandb
 import soundfile as sf
 import sounddevice as sd
 import librosa
 from nnsp_pack import tfrecord_converter_se_split
 from nnsp_pack.feature_module import FeatureClass, display_stft_all
 from nnsp_pack import add_noise
-from nnsp_pack import boto3_op
 from nnsp_pack.se_download import se_download
 from nnsp_pack.basic_dsp import dc_remove
 
@@ -36,7 +34,7 @@ else:
     SNR_DBS = [-6, -3, 0, 3, 6, 9, 12, 15, 30]
 
 NTYPES = [
-    'ESC-50-MASTER',
+    'ESC-50-master',
     'wham_noise',
     'FSD50K',
     'musan',
@@ -47,18 +45,6 @@ params_audio = {
     'len_fft'       : 512,
     'sample_rate'   : 16000,
     'nfilters_mel'  : 72 }
-
-def download_data():
-    """
-    download data
-    """
-    audio_lists = [
-        'data/test_files_se.csv',
-        'data/train_files_se.csv',
-        'data/noise_list.csv']
-    s3 = boto3.client('s3')
-    boto3_op.s3_download(S3_BUCKET, audio_lists)
-    return s3
 
 class FeatMultiProcsClass(multiprocessing.Process):
     """
@@ -187,6 +173,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
             # add noise to sig
             rir = None
             reverbing = False
+
             if self.reverb_lst:
                 rd_reverb = np.random.uniform(0,1)
                 if rd_reverb < self.reverb_prob:
@@ -226,6 +213,7 @@ class FeatMultiProcsClass(multiprocessing.Process):
             spec_s, _, feat_s, pspec_s    = self.feat_inst.block_proc(audio_s)
             if DEBUG:
                 if reverbing:
+
                     print('has reverb')
                 sd.play(
                     audio_sn,
@@ -288,8 +276,6 @@ def main(args):
     if download:
         se_download()
 
-    if DOWLOAD_DATA:
-        s3 = download_data()
     if args.wandb_track:
         run = wandb.init(
             project=args.wandb_project,
@@ -300,7 +286,7 @@ def main(args):
     sets_categories = ['train', 'test']
 
     if REVERB:
-        tmp = add_noise.get_noise_files_new("rirs_noises/RIRS_NOISES/simulated_rirs")
+        tmp = add_noise.get_noise_files_new("RIRS_NOISES/simulated_rirs")
         random.shuffle(tmp)
         start = int(len(tmp) / 5)
         lst_reverb = {}
@@ -322,7 +308,7 @@ def main(args):
                     for name in lst_ns:
                         name = re.sub(r'\\', '/', name)
                         file.write(f'{name}\n')
-        elif ntype in {'FSD50K','ESC-50-MASTER'}:
+        elif ntype in {'FSD50K','ESC-50-master'}:
             with open(f'wavs/noise/{ntype}/non_speech.csv', 'r') as file: # pylint: disable=unspecified-encoding
                 lines = file.readlines()
             random.shuffle(lines)
@@ -397,6 +383,7 @@ def main(args):
         with open(target_files[train_set], 'r') as file: # pylint: disable=unspecified-encoding
             filepaths = file.readlines()
             random.shuffle(filepaths)
+
             if datasize_noise != -1:
                 if train_set=='train':
                     filepaths = filepaths[:datasize_noise]
@@ -430,6 +417,7 @@ def main(args):
 
             noise_files = { 'train' : lines_tr,
                             'test'  : lines_te}
+
             processes = [
                 FeatMultiProcsClass(
                         i, f"Thread-{i}",
@@ -511,7 +499,7 @@ if __name__ == "__main__":
         '-s',
         '--datasize_noise',
         type    = int,
-        default = 20000, # 45000
+        default = 20000, # 20000
         help='How many speech samples per noise')
 
     argparser.add_argument(

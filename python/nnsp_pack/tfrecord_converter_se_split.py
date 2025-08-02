@@ -118,7 +118,7 @@ def tfrecords_pipeline(
                 cycle_length       = batchsize,
                 block_length       = 1,
                 deterministic      = True,
-                num_parallel_calls = 5)
+                num_parallel_calls = tf.data.AUTOTUNE)
     dataset = dataset.map(
                 mapping,
                 num_parallel_calls = tf.data.AUTOTUNE,

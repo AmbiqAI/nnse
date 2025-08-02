@@ -473,6 +473,7 @@ class FeatureClass:
         self.fast_stft = fast_stft
         self.win_size = win_size
         self.hop = hop
+        self.overlap_size = win_size - hop
         self.len_fft = len_fft
         self.sample_rate = sample_rate
         self.nfilters_mel = nfilters_mel
@@ -510,6 +511,32 @@ class FeatureClass:
         """
         self.buf *= 0
 
+    def istft_frame_proc(
+            self,
+            data_freqs,
+            tfmasks = 1.0):
+        """
+        istft_frame_proc
+        """
+   
+        time_steps, _ = data_freqs.shape
+        obuf = np.zeros(self.win_size)
+        odatas = np.array([])
+        specs_en = []
+        for i in range(time_steps):
+            data_freq = data_freqs[i]
+            data_freq = data_freq * tfmasks[i]
+            specs_en += [data_freq]
+            data = np.fft.irfft(data_freq)[:self.win_size]
+            wdata = data * self.win
+            obuf += wdata
+            odata = obuf[:self.hop].copy()
+            obuf[:self.overlap_size] = obuf[self.hop:]
+            obuf[self.overlap_size:] = 0
+            
+            odatas = np.concatenate((odatas, odata))
+            
+        return odatas, np.array(specs_en)
     def frame_proc(self, data):
         """
         Frame process

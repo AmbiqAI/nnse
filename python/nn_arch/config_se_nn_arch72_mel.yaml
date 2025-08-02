@@ -1,0 +1,31 @@
+nn_arch:
+  - layer_neurons: 72
+
+  - layer_type: conv1d
+    layer_neurons: 72
+    kernel_size: 6
+    activation: tanh
+    dropout: 0.1
+
+  - layer_type: lstm
+    layer_neurons: 72
+    activation: tanh
+    dropout: 0.25
+
+  - layer_type: fc
+    layer_neurons: 72
+    activation: tanh
+    dropout: 0.25
+
+  - layer_type: fc
+    layer_neurons: 72
+    activation: tanh
+    dropout: 0.25
+
+  - layer_type: fc
+    layer_neurons: 257
+    activation: sigmoid
+    dropout: 0.25
+feat:
+  type: 'mel'
+  num_lookahead: 0  # if !=0, it is non-causal

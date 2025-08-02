@@ -1,0 +1,19 @@
+nn_arch:
+  - layer_neurons: 257 # input neurons
+
+  - layer_type: unet # layer 0
+    dropout: 0.1
+    activation: relu
+    separable: True
+    normalization_layer: ''
+    layer_neurons: 257
+    kernel_size_time: 2
+    num_chs: [1, 16, 16, 16, 16]
+
+  # - layer_type: fc # layer 1
+  #   layer_neurons: 257
+  #   dropout: 0
+  #   activation: sigmoid
+feat:
+  type: 'pspec'
+  num_lookahead: 2  # if !=0, it is non-causal

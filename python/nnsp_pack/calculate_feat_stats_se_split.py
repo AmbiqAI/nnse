@@ -14,12 +14,11 @@ def feat_stats_estimator(
         batchsize,
         dim_feat,
         folder_nn,
-        feat_type='mel'):
+        mat_feat=None):
     """
     Estimate statistics of training data
     """
-    fbanks = np.load('fbank_mel.npy')
-    fbanks = tf.Variable(fbanks.T, dtype=tf.float32, trainable = False)
+
     mean_stats = tf.Variable( tf.zeros((dim_feat,), dtype = tf.float64),
                     dtype = tf.float64, trainable = False)
     inv_std_stats = tf.Variable(tf.zeros((dim_feat,), dtype = tf.float64),
@@ -28,16 +27,6 @@ def feat_stats_estimator(
 
     num_batches = int(len(fnames) / batchsize)
 
-    def convert_pspec2melspec(data, feat_type='mel'):
-        """
-        more feat extraction
-        """
-        if feat_type=='mel':
-            feats = tf.matmul(data, fbanks)
-            feats = tf_log10_eps(feats)
-        elif feat_type=='pspec':
-            feats = tf_log10_eps(data)
-        return fakefix_tf(feats, 32, 15)
 
     # mean calculation
     for batch, data in enumerate(dataset):
@@ -45,7 +34,9 @@ def feat_stats_estimator(
             tf.print(f"\rMean estimating (batch) {int(batch / 5)}/{num_batches}, ",
                         end = '')
         pspec_sn, masks, _, _ = data
-        feats = convert_pspec2melspec(pspec_sn, feat_type)
+        feats = tf.matmul(pspec_sn, mat_feat)
+        feats = tf_log10_eps(feats)
+        feats = fakefix_tf(feats, 32, 15)
         _, _, dim_feat = feats.shape
         tmp = tf.math.reduce_sum(feats * masks, axis = (0,1))
         mean_stats = mean_stats + tf.cast(tmp, tf.float64)
@@ -62,7 +53,9 @@ def feat_stats_estimator(
             tf.print(f"\rSTD estimating (batch) {int(batch / 5)}/{num_batches}, ",
                         end = '')
         pspec_sn, masks, _, _ = data
-        feats = convert_pspec2melspec(pspec_sn, feat_type)
+        feats = tf.matmul(pspec_sn, mat_feat)
+        feats = tf_log10_eps(feats)
+        feats = fakefix_tf(feats, 32, 15)
         _, _, dim_feat = feats.shape
         tmp = tf.math.reduce_sum( masks * (feats - mean_stats)**2, axis = (0,1))
         inv_std_stats = inv_std_stats + tf.cast(tmp, tf.float64)
