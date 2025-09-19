@@ -2,10 +2,6 @@
 
 Neural Network Speech Enhancement (NNSE) is a speech enhancement (SE) model based on recurrent neural networks (RNN).  
 
-**Update (04/02/2025):** 
-1. Added support for the U-Net architecture.
-2. Added TensorFlow Lite for Microcontrollers (TFLM) support (16x8 bit).
-
 ## Getting Started
 If you're new to NNSE, begin by cloning the repo and checking out the Python tools for model conversion and training:
 ```sh
