@@ -32,9 +32,8 @@ To work on Apollo5, you need
 - Segger J-Link v7.56+
 - Python 3.10+
 
-1. Navigate to the Python directory
+1. Virtual environment
     ```sh
-    cd nnse/python
     python -m venv .venv
     source .venv/bin/activate
     pip install -r requirements.txt
@@ -66,9 +65,9 @@ To work on Apollo5, you need
     python -m record_evb --tty COM4
     ```
 1. Start SE Recording
-    - Press Button 1 on the EVB to begin a speech enhancement (SE) recording session.
+    - Press Button 0 on the EVB to begin a speech enhancement (SE) recording session.
     - Speak clearly into the microphone while the recording is active.
-    - Press Button 1 again to stop the recording.
+    - Press Button 0 again to stop the recording.
 
 
 1. Check the two recording files under `nnse/python/tools/audio_result/`. 

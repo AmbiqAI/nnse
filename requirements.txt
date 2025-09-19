@@ -1,0 +1,17 @@
+tensorflow[and-cuda]== 2.15.1
+tensorboard
+erpc@git+https://github.com/ambiqai/erpc.git#egg=develop&subdirectory=erpc_python
+pyserial
+pyyaml
+numpy
+librosa
+matplotlib
+sounddevice
+soundfile
+argparse
+pyaudio
+pyqt5
+scipy
+tqdm
+pesq
+pystoi
