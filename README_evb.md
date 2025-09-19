@@ -52,9 +52,7 @@ To work on Apollo5, you need
 
 1. In a separate terminal, activate the Python environment and launch the 10-second recording tool:
     ```sh
-    cd nnse/python  # Navigate to the "nnse/python" directory
-    source .venv/bin/activate # Activate the virtual environment
-    cd tools # Go to "nnse/python/tools" directory
+    cd nnse/python/tools  # Navigate to the "nnse/python" directory
     ```
 1. Run the appropriate command based on your operating system:
     ```sh
