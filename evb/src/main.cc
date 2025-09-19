@@ -255,16 +255,20 @@ int main(void) {
     // USB. This gives the user a chance to start the server then
     // pressing the button to let the EVB it is ready to start RPCing.
 
-    ns_printf("Type $tools/python -m record_evb --tty <your tty>\n");
+    ns_printf("Start the other terminal\n");
+    ns_printf("cd ...nnse/python/tools\n");
+    
+    ns_printf("Select the correct serial port for your OS:\n");
+    ns_printf("Type $tools/python -m record_evb --tty /dev/tty.usbmodem1234561(MacOS)\n");
+    ns_printf("Type $tools/python -m record_evb --tty /dev/serial/by-id/usb-TinyUSB_TinyUSB_Device_123457-if00 (ubuntu)\n");
+    ns_printf("Type $tools/python -m record_evb --tty COM4 (WinOS)\n");
 
-    ns_printf("Start the PC-side server, then press Button 0 to get started\n");
+    ns_printf("Then press the button 0 on the EVB to start recording\n");
+    ns_printf("Say something to your microphone!\n");
+    ns_printf("Press button 0 again to stop recording\n");
     while (g_intButtonPressed == 0) {
         ns_delay_us(1000);
     }
-
-    // g_intButtonPressed is retired after this point.
-    ns_printf("Starting remote procedure call demo.\n");
-
     // In the app loop we service USB and the RPC server while
     // we collect data and send it over the various RPC
     // interfaces. Any incoming RPC calls will result in calls to the
