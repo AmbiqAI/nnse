@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "spectrogram_module.h": "c",
+        "fft_arm.h": "c"
+    }
+}

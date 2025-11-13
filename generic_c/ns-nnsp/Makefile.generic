@@ -1,0 +1,29 @@
+# Generic Makefile for building a C static library from all .c files in src/
+# No CMSIS or platform-specific includes
+
+
+
+CC = gcc
+CFLAGS ?= -O2 -std=c99
+CFLAGS += -DFIXED_POINT=32 # Added for kiss_fft and kiss_fftr, specifically for int32
+
+SRCS := $(wildcard src/*.c)
+OBJS := $(patsubst src/%.c,bin/%.o,$(SRCS))
+LIB := libgeneric.a
+
+
+AR ?= ar
+
+all: bin $(LIB)
+
+bin:
+	mkdir -p bin
+
+$(LIB): $(OBJS)
+	$(AR) rcs $@ $^
+
+bin/%.o: src/%.c
+	$(CC) $(CFLAGS) -Isrc -Iincludes-api -c $< -o $@
+
+clean:
+	rm -f bin/*.o $(LIB)
